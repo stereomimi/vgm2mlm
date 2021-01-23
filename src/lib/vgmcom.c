@@ -193,7 +193,6 @@ vgm2mlm_status_code_t VGMCOM_data_block(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_pcm_ram_write(vgm2mlm_ctx_t* ctx)
 {
-	printf("YOU SHOULDN'T BE HERE YOU MAD FUCKING CUNT\n");
 	//fatal_printf("ERROR: pcm_ram_write command isn't supported\n");
 	return VGM2MLM_STERR_PCM_WRITE;
 }
