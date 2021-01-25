@@ -191,17 +191,22 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	memcpy(mlm_buffer, MLM_HEADER, sizeof(MLM_HEADER));
 	char* mlm_event_list = mlm_buffer + sizeof(MLM_HEADER);
 	
-	uint16_t tmb_load = (uint16_t)roundf(
-		256.0 - (1.0 / ctx.frequency / 1152.0 * 4000000.0));
+	uint16_t tma_load = (uint16_t)roundf(
+		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));
 	
 	ctx.mlm_head = mlm_event_list;
 	ctx.mlm_loop_start = NULL;
 	ctx.vrom_buffer = NULL;
 	ctx.vgm_head = vgm_data;
 
-	ctx.mlm_head[0] = 0x09; // Set timer b command
+	/*ctx.mlm_head[0] = 0x09; // Set timer b command
 	ctx.mlm_head[1] = tmb_load;
 	ctx.mlm_head[2] = 0;    // execute the next event immediately
+	ctx.mlm_head += 3;*/
+
+	ctx.mlm_head[0] = 0x0F; // Set timer a command
+	ctx.mlm_head[1] = tma_load >> 2;
+	ctx.mlm_head[2] = tma_load & 2;   
 	ctx.mlm_head += 3;
 
 	uint8_t current_bank = 0;
