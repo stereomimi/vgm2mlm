@@ -9,6 +9,8 @@
 #define TRACK_NOTES_LINES 10
 #define PROM_SIZE 524288
 #define DEFLEMASK 1
+#define TMA_MAX_FREQ 55560
+#define TMA_MIN_FREQ 55
 
 //#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
 #define DEBUG_PRINTF(...)
@@ -22,6 +24,7 @@ typedef struct {
 	char* mlm_loop_start;
 	size_t vrom_buffer_size;
 	int frequency;
+	int base_time;
 	uint32_t vgm_data_offset;
 	uint32_t vgm_loop_offset;
 	char track_name[TRACK_INFO_LINE_LENGTH];
@@ -50,6 +53,7 @@ typedef enum {
 	VGM2MLM_STERR_FAILED_TO_READ_FILE,
 	VGM2MLM_STERR_FAILED_TO_WRITE_TO_FILE,
 	VGM2MLM_STERR_BAD_VGM_FILE,
+	VGM2MLM_STERR_UNSUPPORTED_FREQUENCY,
 	VGM2MLM_STATUS_COUNT
 } vgm2mlm_status_code_t;
 
