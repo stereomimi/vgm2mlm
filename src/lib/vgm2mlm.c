@@ -25,7 +25,8 @@ const char* VGM2MLM_STATUS_MESSAGES[VGM2MLM_STATUS_COUNT] =
 	"ERROR: Invalid or corrupted GD3 tag",
 	"ERROR: Failed to load file into buffer",
 	"ERROR: Failed to to write buffer to file",
-	"ERROR: The VGM file is corrupted"
+	"ERROR: The VGM file is corrupted",
+	"ERROR: Unsupported frequency"
 };
 
 const uint16_t MLM_HEADER[14] = 
@@ -120,13 +121,33 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	ctx->vgm_data_offset += 0x34;
 
 	DEBUG_PRINTF("vgm data ofs\t0x%08X\n",ctx->vgm_data_offset);
+
 	if (ctx->frequency == 0)
 	{
 		ctx->frequency = 
 			vmg2mlm_le_32bit_read(vgm_buffer+0x24);
-
+		
 		if (ctx->frequency == 0)
 			ctx->frequency = 60;
+		else if (ctx->frequency > TMA_MAX_FREQ)
+			return VGM2MLM_STERR_UNSUPPORTED_FREQUENCY;
+		else if (ctx->frequency < TMA_MIN_FREQ)
+		{
+			for (int i = 2; i < 256; ++i)
+			{
+				if (ctx->frequency*i > TMA_MAX_FREQ)
+					return VGM2MLM_STERR_UNSUPPORTED_FREQUENCY;
+				else if (ctx->frequency*i > TMA_MIN_FREQ)
+				{
+					ctx->base_time = i;
+					ctx->frequency *= i;
+					break;
+				}
+			}
+
+			if (ctx->frequency < TMA_MIN_FREQ)
+				return VGM2MLM_STERR_UNSUPPORTED_FREQUENCY;
+		}
 	}
 
 	uint32_t gd3_offset =
@@ -179,11 +200,14 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 
 	vgm2mlm_ctx_t ctx;
 	ctx.frequency = frequency;
+	ctx.base_time = 1;
 
 	vgm2mlm_status_code_t status =
 		vgm2mlm_parse_vgm_header(&ctx, vgm_buffer, vgm_size);
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
+
+	printf("ctx.base_time: %d\n", ctx.base_time);
 
 	char* vgm_data = vgm_buffer + ctx.vgm_data_offset;
 
@@ -193,7 +217,8 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	
 	uint16_t tma_load = (uint16_t)roundf(
 		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));
-	
+	printf("tma_load: %d\n", tma_load);
+
 	ctx.mlm_head = mlm_event_list;
 	ctx.mlm_loop_start = NULL;
 	ctx.vrom_buffer = NULL;
@@ -204,9 +229,16 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	ctx.mlm_head[2] = 0;    // execute the next event immediately
 	ctx.mlm_head += 3;*/
 
-	ctx.mlm_head[0] = 0x0F; // Set timer a command
+	// Set timer a command
+	ctx.mlm_head[0] = 0x0F; 
 	ctx.mlm_head[1] = tma_load >> 2;
 	ctx.mlm_head[2] = tma_load & 2;   
+	ctx.mlm_head += 3;
+
+	// Set base time command
+	ctx.mlm_head[0] = 0x08;
+	ctx.mlm_head[1] = ctx.base_time;
+	ctx.mlm_head[2] = 0; // execute the next event immediately
 	ctx.mlm_head += 3;
 
 	uint8_t current_bank = 0;
