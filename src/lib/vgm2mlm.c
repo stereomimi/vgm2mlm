@@ -103,45 +103,8 @@ void vgm2mlm_swap_bytes(const char* src, char* dest, size_t size)
 	}
 }
 
-vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buffer, size_t vgm_size)
+vgm2mlm_status_code_t vgm2mlm_parse_gd3(vgm2mlm_ctx_t* ctx, char* vgm_buffer, size_t vgm_size)
 {
-	if (vgm_size <= 0x4C)
-		return VGM2MLM_STERR_BAD_VGM_FILE;
-
-	if (strncmp(vgm_buffer, "Vgm ", 4) != 0)
-		return VGM2MLM_STERR_INVALID_VGM_FILE;
-
-	uint32_t ym2610_clock =
-		vmg2mlm_le_32bit_read(vgm_buffer+0x4C);
-	if (!ym2610_clock)
-		return VGM2MLM_STERR_NO_YM2610;
-
-	ctx->vgm_loop_offset =
-		vmg2mlm_le_32bit_read(vgm_buffer+0x1C);
-	if (ctx->vgm_loop_offset != 0)
-		ctx->vgm_loop_offset += 0x1C;
-
-	ctx->vgm_data_offset =
-		vmg2mlm_le_32bit_read(vgm_buffer+0x34);
-	ctx->vgm_data_offset += 0x34;
-
-	DEBUG_PRINTF("vgm data ofs\t0x%08X\n",ctx->vgm_data_offset);
-
-	// If the frequency is 0 (thus treated as not specified) and if the automatic
-	// detection of the frequency from the first wait command is off, then get the
-	// frequency from the VGM header.
-	if (ctx->frequency == 0 && !(ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS))
-	{
-		uint32_t vgm_frequency = 
-			vmg2mlm_le_32bit_read(vgm_buffer+0x24);
-		
-		vgm2mlm_status_code_t status =
-			vgm2mlm_set_timing(ctx, vgm_frequency);
-
-		if (status != VGM2MLM_STSUCCESS)
-			return status;
-	}
-
 	uint32_t gd3_offset =
 		vmg2mlm_le_32bit_read(vgm_buffer+0x14);
 
@@ -182,6 +145,50 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	return VGM2MLM_STSUCCESS;
 }
 
+vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buffer, size_t vgm_size)
+{
+	vgm2mlm_status_code_t status = VGM2MLM_STSUCCESS;
+
+	if (vgm_size <= 0x4C)
+		return VGM2MLM_STERR_BAD_VGM_FILE;
+
+	if (strncmp(vgm_buffer, "Vgm ", 4) != 0)
+		return VGM2MLM_STERR_INVALID_VGM_FILE;
+
+	uint32_t ym2610_clock =
+		vmg2mlm_le_32bit_read(vgm_buffer+0x4C);
+	if (!ym2610_clock)
+		return VGM2MLM_STERR_NO_YM2610;
+
+	ctx->vgm_loop_offset =
+		vmg2mlm_le_32bit_read(vgm_buffer+0x1C);
+	if (ctx->vgm_loop_offset != 0)
+		ctx->vgm_loop_offset += 0x1C;
+
+	ctx->vgm_data_offset =
+		vmg2mlm_le_32bit_read(vgm_buffer+0x34);
+	ctx->vgm_data_offset += 0x34;
+
+	DEBUG_PRINTF("vgm data ofs\t0x%08X\n",ctx->vgm_data_offset);
+
+	// If the frequency is 0 (thus treated as not specified) and if the automatic
+	// detection of the frequency from the first wait command is off, then get the
+	// frequency from the VGM header.
+	if (ctx->frequency == 0 && !(ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS))
+	{
+		uint32_t vgm_frequency = 
+			vmg2mlm_le_32bit_read(vgm_buffer+0x24);
+		
+		status = vgm2mlm_set_timing(ctx, vgm_frequency);
+
+		if (status != VGM2MLM_STSUCCESS)
+			return status;
+	}
+
+	status = vgm2mlm_parse_gd3(ctx, vgm_buffer, vgm_size);
+	return status;
+}
+
 vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* output)
 {
 	const int PROM_TRACK_AUTHOR_OFS = 0x0BB2;
@@ -216,7 +223,10 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 	output->prom_buffer =
 		(char*)malloc(PROM_SIZE);
 	if (output->prom_buffer == NULL)
+	{
+		free(unswapped_prom);
 		return VGM2MLM_STERR_FAILED_MEM_ALLOCATION;
+	}
 
 	vgm2mlm_swap_bytes(unswapped_prom, output->prom_buffer, PROM_SIZE);
 	
@@ -326,7 +336,7 @@ char* vgm2mlm_file2buffer(const char* filepath, size_t* size)
 
 	file = fopen(filepath, "rb");
 
-	if (file <= 0)
+	if (file == NULL)
 		return NULL;
 
 	fseek(file, 0, SEEK_END);
@@ -352,7 +362,7 @@ vgm2mlm_status_code_t vgm2mlm_write_buffer_to_file(const char* filename, const c
 	FILE* out_file = NULL;
 	out_file = fopen(filename, "wb"); 
 
-	if (out_file <= 0)
+	if (out_file == NULL)
 		return VGM2MLM_STERR_FAILED_TO_WRITE_TO_FILE;
 
 	if (fwrite(buffer, 1, buffer_size, out_file) != buffer_size)
