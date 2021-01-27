@@ -1,6 +1,9 @@
 #ifndef VGM2MLM_CTX_H
 #define VGM2MLM_CTX_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #define YM2610B_CLOCK_BITMASK 0x80000000
 #define VROM_BUFFER_SIZE 16777216
 #define M1_BUFFER_SIZE 262144
@@ -11,6 +14,13 @@
 #define DEFLEMASK 1
 #define TMA_MAX_FREQ 55560
 #define TMA_MIN_FREQ 55
+#define VGM_RATE 44100
+
+// Detects the frequency from the first wait 
+// command of the vgm event list. It's suggested
+// to use this only with VGM files outputted
+// with programs such as Deflemask.
+#define VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS 1 
 
 //#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
 #define DEBUG_PRINTF(...)
@@ -29,6 +39,8 @@ typedef struct {
 	uint32_t vgm_loop_offset;
 	char track_name[TRACK_INFO_LINE_LENGTH];
 	char track_author[TRACK_INFO_LINE_LENGTH];
+	uint32_t conversion_flags;
+	bool was_freq_detected_from_wait_coms;
 } vgm2mlm_ctx_t;
 
 typedef struct {

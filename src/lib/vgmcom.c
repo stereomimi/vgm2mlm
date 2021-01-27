@@ -70,6 +70,23 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 {
 	uint16_t samples = *(uint16_t*)(ctx->vgm_head+1);
+
+	// If the frequency wasn't detected 
+	// from a wait command yet, calculate
+	// the frequency (assuming it waited
+	// only a single frame) and store
+	// said frequency.
+	if ((ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS) 
+		&& !ctx->was_freq_detected_from_wait_coms)
+	{
+		ctx->was_freq_detected_from_wait_coms = true;
+		vgm2mlm_status_code_t status =
+			vgm2mlm_set_timing(ctx, VGM_RATE / samples);
+
+		if (status != VGM2MLM_STSUCCESS)
+			return status;
+	}
+
 	uint ticks = (uint)roundf(
 		samples * ctx->frequency / 44100);
 
@@ -98,6 +115,20 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_wait_735_samples(vgm2mlm_ctx_t* ctx)
 {
+	// If the frequency wasn't detected 
+	// from a wait command yet, set 
+	// the frequency to 60Hz
+	if ((ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS) 
+		&& !ctx->was_freq_detected_from_wait_coms)
+	{
+		ctx->was_freq_detected_from_wait_coms = true;
+		vgm2mlm_status_code_t status =
+			vgm2mlm_set_timing(ctx, 60);
+
+		if (status != VGM2MLM_STSUCCESS)
+			return status;
+	}
+
 	uint ticks = (uint)roundf(
 		735 * ctx->frequency / 44100);
 
@@ -126,6 +157,20 @@ vgm2mlm_status_code_t VGMCOM_wait_735_samples(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_wait_882_samples(vgm2mlm_ctx_t* ctx)
 {
+	// If the frequency wasn't detected 
+	// from a wait command yet, set 
+	// the frequency to 50Hz
+	if ((ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS) 
+		&& !ctx->was_freq_detected_from_wait_coms)
+	{
+		ctx->was_freq_detected_from_wait_coms = true;
+		vgm2mlm_status_code_t status =
+			vgm2mlm_set_timing(ctx, 50);
+
+		if (status != VGM2MLM_STSUCCESS)
+			return status;
+	}
+
 	uint ticks = (uint)roundf(
 		882 * ctx->frequency / 44100);
 
