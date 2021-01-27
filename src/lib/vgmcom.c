@@ -90,24 +90,7 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 	uint ticks = (uint)roundf(
 		samples * ctx->frequency / 44100);
 
-	if (ticks < UINT4_MAX)
-	{
-		ctx->mlm_head[0] = 0x10 | ticks;
-		ctx->mlm_head += 1;
-	}
-	else if (ticks < UINT8_MAX)
-	{
-		ctx->mlm_head[0] = 0x03; // wait ticks command (byte)
-		ctx->mlm_head[1] = ticks;
-		ctx->mlm_head += 2;
-	}
-	else
-	{
-		ctx->mlm_head[0] = 0x04; // wait ticks command (word)
-		ctx->mlm_head[1] = ticks & 0xFF;
-		ctx->mlm_head[2] = ticks >> 8;
-		ctx->mlm_head += 3;
-	}
+	vgm2mlm_append_mlm_wait_com(ctx, ticks);
 
 	ctx->vgm_head += 3;
 	return VGM2MLM_STSUCCESS;
@@ -132,24 +115,7 @@ vgm2mlm_status_code_t VGMCOM_wait_735_samples(vgm2mlm_ctx_t* ctx)
 	uint ticks = (uint)roundf(
 		735 * ctx->frequency / 44100);
 
-	if (ticks < UINT4_MAX)
-	{
-		ctx->mlm_head[0] = 0x10 | ticks;
-		ctx->mlm_head += 1;
-	}
-	else if (ticks < UINT8_MAX)
-	{
-		ctx->mlm_head[0] = 0x03; // wait ticks command (byte)
-		ctx->mlm_head[1] = ticks;
-		ctx->mlm_head += 2;
-	}
-	else
-	{
-		ctx->mlm_head[0] = 0x04; // wait ticks command (word)
-		ctx->mlm_head[1] = ticks & 0xFF;
-		ctx->mlm_head[2] = ticks >> 8;
-		ctx->mlm_head += 3;
-	}
+	vgm2mlm_append_mlm_wait_com(ctx, ticks);
 
 	ctx->vgm_head += 1;
 	return VGM2MLM_STSUCCESS;
@@ -174,24 +140,7 @@ vgm2mlm_status_code_t VGMCOM_wait_882_samples(vgm2mlm_ctx_t* ctx)
 	uint ticks = (uint)roundf(
 		882 * ctx->frequency / 44100);
 
-	if (ticks < UINT4_MAX)
-	{
-		ctx->mlm_head[0] = 0x10 | ticks;
-		ctx->mlm_head += 1;
-	}
-	else if (ticks < UINT8_MAX)
-	{
-		ctx->mlm_head[0] = 0x03; // wait ticks command (byte)
-		ctx->mlm_head[1] = ticks;
-		ctx->mlm_head += 2;
-	}
-	else
-	{
-		ctx->mlm_head[0] = 0x04; // wait ticks command (word)
-		ctx->mlm_head[1] = ticks & 0xFF;
-		ctx->mlm_head[2] = ticks >> 8;
-		ctx->mlm_head += 3;
-	}
+	vgm2mlm_append_mlm_wait_com(ctx, ticks);
 
 	ctx->vgm_head += 1;
 	return VGM2MLM_STSUCCESS;
@@ -217,7 +166,6 @@ vgm2mlm_status_code_t VGMCOM_data_block(vgm2mlm_ctx_t* ctx)
 				ctx->vrom_buffer = (char*)realloc(ctx->vrom_buffer, rom_size);
 				if (ctx->vrom_buffer == NULL)
 					return VGM2MLM_STERR_FAILED_REALLOCATION;
-					//fatal_printf("[VGMCOM_data_block] Failed reallocation");
 
 				memcpy(ctx->vrom_buffer+start_addr_offset, adpcma_rom, adpcma_rom_size);
 				ctx->vrom_buffer_size = rom_size;

@@ -44,4 +44,26 @@ vgm2mlm_status_code_t vgm2mlm_set_timing(vgm2mlm_ctx_t* ctx, uint32_t frequency)
 	return VGM2MLM_STSUCCESS;
 }
 
+void vgm2mlm_append_mlm_wait_com(vgm2mlm_ctx_t* ctx, uint ticks)
+{
+	if (ticks < UINT4_MAX)
+	{
+		ctx->mlm_head[0] = 0x10 | ticks;
+		ctx->mlm_head += 1;
+	}
+	else if (ticks < UINT8_MAX)
+	{
+		ctx->mlm_head[0] = 0x03; // wait ticks command (byte)
+		ctx->mlm_head[1] = ticks;
+		ctx->mlm_head += 2;
+	}
+	else
+	{
+		ctx->mlm_head[0] = 0x04; // wait ticks command (word)
+		ctx->mlm_head[1] = ticks & 0xFF;
+		ctx->mlm_head[2] = ticks >> 8;
+		ctx->mlm_head += 3;
+	}
+}
+
 #endif

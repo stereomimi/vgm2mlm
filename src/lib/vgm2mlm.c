@@ -26,7 +26,8 @@ const char* VGM2MLM_STATUS_MESSAGES[VGM2MLM_STATUS_COUNT] =
 	"ERROR: Failed to load file into buffer",
 	"ERROR: Failed to to write buffer to file",
 	"ERROR: The VGM file is corrupted",
-	"ERROR: Unsupported frequency"
+	"ERROR: Unsupported frequency",
+	"ERROR: Failed to allocate memory"
 };
 
 const uint16_t MLM_HEADER[14] = 
@@ -47,6 +48,10 @@ const uint16_t MLM_HEADER[14] =
 	0x0000, /* Song 0, Channel 11 offset */
 	0x0000, /* Song 0, Channel 12 offset */
 };
+
+const uint8_t BANK_OFFSET = 2;
+const size_t ZONE3_SIZE = 0x4000;
+const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(16-BANK_OFFSET);
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -132,6 +137,9 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 		
 		vgm2mlm_status_code_t status =
 			vgm2mlm_set_timing(ctx, vgm_frequency);
+
+		if (status != VGM2MLM_STSUCCESS)
+			return status;
 	}
 
 	uint32_t gd3_offset =
@@ -174,14 +182,50 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	return VGM2MLM_STSUCCESS;
 }
 
-vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
+vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* output)
 {
-	const uint8_t BANK_OFFSET = 2;
-	const size_t ZONE3_SIZE = 0x4000;
-	const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(16-BANK_OFFSET);
 	const int PROM_TRACK_AUTHOR_OFS = 0x0BB2;
 	const int PROM_TRACK_NAME_OFS   = 0x0BD0;
 
+	output->m1rom_size = (ctx->current_bank+BANK_OFFSET+1)*ZONE3_SIZE;
+	DEBUG_PRINTF("m1rom size\t%d\n", output->m1rom_size);
+	
+	output->m1rom_buffer = 
+		(char*)malloc(output->m1rom_size);
+	if (output->m1rom_buffer == NULL)
+		return VGM2MLM_STERR_FAILED_MEM_ALLOCATION;
+
+	memcpy(output->m1rom_buffer, driver_m1, driver_m1_size);
+	memcpy(output->m1rom_buffer+(ZONE3_SIZE*BANK_OFFSET), ctx->mlm_buffer, (ctx->current_bank+1)*ZONE3_SIZE);
+	DEBUG_PRINTF("m1rom mlm ofs\t0x%05X\n", ZONE3_SIZE*BANK_OFFSET);
+	DEBUG_PRINTF("m1rom mlm size\t0x%05X\n", (ctx->current_bank+1)*ZONE3_SIZE);
+
+	output->vrom_buffer = ctx->vrom_buffer;
+	output->vrom_size = ctx->vrom_buffer_size;
+
+	char* unswapped_prom =
+		(char*)malloc(PROM_SIZE);
+	if (unswapped_prom == NULL)
+		return VGM2MLM_STERR_FAILED_MEM_ALLOCATION;
+
+	memset(unswapped_prom, 0xFF, PROM_SIZE);
+	memcpy(unswapped_prom, driver_p1, driver_p1_size);
+	memcpy(unswapped_prom+PROM_TRACK_AUTHOR_OFS, ctx->track_author, sizeof(ctx->track_author));
+	memcpy(unswapped_prom+PROM_TRACK_NAME_OFS, ctx->track_name, sizeof(ctx->track_name));
+
+	output->prom_buffer =
+		(char*)malloc(PROM_SIZE);
+	if (output->prom_buffer == NULL)
+		return VGM2MLM_STERR_FAILED_MEM_ALLOCATION;
+
+	vgm2mlm_swap_bytes(unswapped_prom, output->prom_buffer, PROM_SIZE);
+	
+	free(unswapped_prom);
+	return VGM2MLM_STSUCCESS;
+}
+
+vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
+{
 	vgm2mlm_ctx_t ctx;
 	ctx.frequency = frequency;
 	ctx.base_time = 1;
@@ -196,32 +240,26 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 
 	char* vgm_data = vgm_buffer + ctx.vgm_data_offset;
 
-	char* mlm_buffer = (char*)malloc(MLM_BUFFER_SIZE);	
-	memcpy(mlm_buffer, MLM_HEADER, sizeof(MLM_HEADER));
-	char* mlm_event_list = mlm_buffer + sizeof(MLM_HEADER);
+	ctx.mlm_buffer = (char*)malloc(MLM_BUFFER_SIZE);
+	if (ctx.mlm_buffer == NULL)
+		return VGM2MLM_STERR_FAILED_MEM_ALLOCATION;
+
+	memcpy(ctx.mlm_buffer, MLM_HEADER, sizeof(MLM_HEADER));
+	char* mlm_event_list = ctx.mlm_buffer + sizeof(MLM_HEADER);
 
 	ctx.mlm_head = mlm_event_list;
 	ctx.mlm_loop_start = NULL;
 	ctx.vrom_buffer = NULL;
 	ctx.vgm_head = vgm_data;
-
-	/*ctx.mlm_head[0] = 0x09; // Set timer b command
-	ctx.mlm_head[1] = tmb_load;
-	ctx.mlm_head[2] = 0;    // execute the next event immediately
-	ctx.mlm_head += 3;*/
-
-	
+	ctx.current_bank = 0;
 
 	// Leave some space to add the set 
 	// timer a and set base time command later
 	ctx.mlm_head += 6;
 
-	uint8_t current_bank = 0;
-
-	//printf("%d\t%d\t0x%04X\n", current_bank+BANK_OFFSET, ctx.mlm_head - mlm_buffer, (uint16_t)(ZONE3_SIZE*(current_bank+BANK_OFFSET)));
 	for (; *ctx.vgm_head != 0x66;)
 	{
-		if (ctx.mlm_head - mlm_buffer >= MLM_BUFFER_SIZE)
+		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE)
 		{
 			status = 
 				VGM2MLM_STERR_MLM_BUFFER_OVERFLOW;
@@ -236,12 +274,12 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		if (status != VGM2MLM_STSUCCESS)
 			break;
 
-		if (ctx.mlm_head - mlm_buffer >= ZONE3_SIZE * (current_bank+1) - 2)
+		if (ctx.mlm_head - ctx.mlm_buffer >= ZONE3_SIZE * (ctx.current_bank+1) - 2)
 		{
-			current_bank++;
-			ctx.mlm_head = mlm_buffer + ZONE3_SIZE*current_bank;
+			ctx.current_bank++;
+			ctx.mlm_head = ctx.mlm_buffer + ZONE3_SIZE*ctx.current_bank;
 			precedent_mlm_head[0] = 0x20;
-			precedent_mlm_head[1] = current_bank+BANK_OFFSET;
+			precedent_mlm_head[1] = ctx.current_bank+BANK_OFFSET;
 			ctx.vgm_head = precedent_vgm_head;
 		}
 	}
@@ -262,33 +300,11 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	mlm_event_list[4] = ctx.base_time;
 	mlm_event_list[5] = 0; // execute the next event immediately
 
-	output->m1rom_size = (current_bank+BANK_OFFSET+1)*ZONE3_SIZE;
-	DEBUG_PRINTF("m1rom size\t%d\n", output->m1rom_size);
-	
-	output->m1rom_buffer = 
-		(char*)malloc(output->m1rom_size);
-	memcpy(output->m1rom_buffer, driver_m1, driver_m1_size);
-	memcpy(output->m1rom_buffer+(ZONE3_SIZE*BANK_OFFSET), mlm_buffer, (current_bank+1)*ZONE3_SIZE);
-	DEBUG_PRINTF("m1rom mlm ofs\t0x%05X\n", ZONE3_SIZE*BANK_OFFSET);
-	DEBUG_PRINTF("m1rom mlm size\t0x%05X\n", (current_bank+1)*ZONE3_SIZE);
+	status = vgm2mlm_create_rom(&ctx, output);
+	if (status != VGM2MLM_STSUCCESS)
+		return status;
 
-	output->vrom_buffer = ctx.vrom_buffer;
-	output->vrom_size = ctx.vrom_buffer_size;
-
-	char* unswapped_prom =
-		(char*)malloc(PROM_SIZE);
-	memset(unswapped_prom, 0xFF, PROM_SIZE);
-	memcpy(unswapped_prom, driver_p1, driver_p1_size);
-	memcpy(unswapped_prom+PROM_TRACK_AUTHOR_OFS, ctx.track_author, sizeof(ctx.track_author));
-	memcpy(unswapped_prom+PROM_TRACK_NAME_OFS, ctx.track_name, sizeof(ctx.track_name));
-
-	output->prom_buffer =
-		(char*)malloc(PROM_SIZE);
-	vgm2mlm_swap_bytes(unswapped_prom, output->prom_buffer, PROM_SIZE);
-	
-	free(mlm_buffer);
-	free(unswapped_prom);
-
+	free(ctx.mlm_buffer);
 	return status;
 }
 
@@ -310,7 +326,7 @@ char* vgm2mlm_file2buffer(const char* filepath, size_t* size)
 
 	file = fopen(filepath, "rb");
 
-	if (file == NULL)
+	if (file <= 0)
 		return NULL;
 
 	fseek(file, 0, SEEK_END);
@@ -336,7 +352,7 @@ vgm2mlm_status_code_t vgm2mlm_write_buffer_to_file(const char* filename, const c
 	FILE* out_file = NULL;
 	out_file = fopen(filename, "wb"); 
 
-	if (out_file == NULL)
+	if (out_file <= 0)
 		return VGM2MLM_STERR_FAILED_TO_WRITE_TO_FILE;
 
 	if (fwrite(buffer, 1, buffer_size, out_file) != buffer_size)
@@ -396,8 +412,8 @@ vgm2mlm_status_code_t vgm2mlm_df_intf(char* vgm_path, char* output_path)
 		filepaths[i] =
 			(char*)malloc(filepath_size);
 
-		strcpy(filepaths[i], output_path);
-		strcat(filepaths[i], FILENAMES[i]);
+		strncpy(filepaths[i], output_path, filepath_size);
+		strncat(filepaths[i], FILENAMES[i], filepath_size);
 		
 		status =
 			vgm2mlm_write_buffer_to_file(filepaths[i], FILEBUFFERS[i], FILESIZES[i]);
