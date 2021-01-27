@@ -122,32 +122,16 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 
 	DEBUG_PRINTF("vgm data ofs\t0x%08X\n",ctx->vgm_data_offset);
 
-	if (ctx->frequency == 0)
+	// If the frequency is 0 (thus treated as not specified) and if the automatic
+	// detection of the frequency from the first wait command is off, then get the
+	// frequency from the VGM header.
+	if (ctx->frequency == 0 && !(ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS))
 	{
-		ctx->frequency = 
+		uint32_t vgm_frequency = 
 			vmg2mlm_le_32bit_read(vgm_buffer+0x24);
 		
-		if (ctx->frequency == 0)
-			ctx->frequency = 60;
-		else if (ctx->frequency > TMA_MAX_FREQ)
-			return VGM2MLM_STERR_UNSUPPORTED_FREQUENCY;
-		else if (ctx->frequency < TMA_MIN_FREQ)
-		{
-			for (int i = 2; i < 256; ++i)
-			{
-				if (ctx->frequency*i > TMA_MAX_FREQ)
-					return VGM2MLM_STERR_UNSUPPORTED_FREQUENCY;
-				else if (ctx->frequency*i > TMA_MIN_FREQ)
-				{
-					ctx->base_time = i;
-					ctx->frequency *= i;
-					break;
-				}
-			}
-
-			if (ctx->frequency < TMA_MIN_FREQ)
-				return VGM2MLM_STERR_UNSUPPORTED_FREQUENCY;
-		}
+		vgm2mlm_status_code_t status =
+			vgm2mlm_set_timing(ctx, vgm_frequency);
 	}
 
 	uint32_t gd3_offset =
@@ -190,7 +174,7 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	return VGM2MLM_STSUCCESS;
 }
 
-vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output)
+vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
 {
 	const uint8_t BANK_OFFSET = 2;
 	const size_t ZONE3_SIZE = 0x4000;
@@ -201,23 +185,20 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	vgm2mlm_ctx_t ctx;
 	ctx.frequency = frequency;
 	ctx.base_time = 1;
+	ctx.conversion_flags = flags;
 
 	vgm2mlm_status_code_t status =
 		vgm2mlm_parse_vgm_header(&ctx, vgm_buffer, vgm_size);
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
 
-	printf("ctx.base_time: %d\n", ctx.base_time);
+	DEBUG_PRINTF("ctx.base_time: %d\n", ctx.base_time);
 
 	char* vgm_data = vgm_buffer + ctx.vgm_data_offset;
 
 	char* mlm_buffer = (char*)malloc(MLM_BUFFER_SIZE);	
 	memcpy(mlm_buffer, MLM_HEADER, sizeof(MLM_HEADER));
 	char* mlm_event_list = mlm_buffer + sizeof(MLM_HEADER);
-	
-	uint16_t tma_load = (uint16_t)roundf(
-		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));
-	printf("tma_load: %d\n", tma_load);
 
 	ctx.mlm_head = mlm_event_list;
 	ctx.mlm_loop_start = NULL;
@@ -229,17 +210,11 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	ctx.mlm_head[2] = 0;    // execute the next event immediately
 	ctx.mlm_head += 3;*/
 
-	// Set timer a command
-	ctx.mlm_head[0] = 0x0F; 
-	ctx.mlm_head[1] = tma_load >> 2;
-	ctx.mlm_head[2] = tma_load & 2;   
-	ctx.mlm_head += 3;
+	
 
-	// Set base time command
-	ctx.mlm_head[0] = 0x08;
-	ctx.mlm_head[1] = ctx.base_time;
-	ctx.mlm_head[2] = 0; // execute the next event immediately
-	ctx.mlm_head += 3;
+	// Leave some space to add the set 
+	// timer a and set base time command later
+	ctx.mlm_head += 6;
 
 	uint8_t current_bank = 0;
 
@@ -272,6 +247,20 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	}
 
 	*ctx.mlm_head = 0x00; // end of event list command
+
+	uint16_t tma_load = (uint16_t)roundf(
+		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));
+	DEBUG_PRINTF("tma_load: %d\n", tma_load);
+
+	// Set timer a command
+	mlm_event_list[0] = 0x0F; 
+	mlm_event_list[1] = tma_load >> 2;
+	mlm_event_list[2] = tma_load & 2;   
+
+	// Set base time command
+	mlm_event_list[3] = 0x08;
+	mlm_event_list[4] = ctx.base_time;
+	mlm_event_list[5] = 0; // execute the next event immediately
 
 	output->m1rom_size = (current_bank+BANK_OFFSET+1)*ZONE3_SIZE;
 	DEBUG_PRINTF("m1rom size\t%d\n", output->m1rom_size);
@@ -379,7 +368,7 @@ vgm2mlm_status_code_t vgm2mlm_df_intf(char* vgm_path, char* output_path)
 
 	vgm2mlm_output_t output;
 	vgm2mlm_status_code_t status =
-		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output);
+		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS);
 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
