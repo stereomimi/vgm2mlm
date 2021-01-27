@@ -31,6 +31,7 @@ typedef struct {
 	char* vgm_head;
 	char* mlm_head;
 	char* vrom_buffer;
+	char* mlm_buffer;
 	char* mlm_loop_start;
 	size_t vrom_buffer_size;
 	int frequency;
@@ -41,6 +42,7 @@ typedef struct {
 	char track_author[TRACK_INFO_LINE_LENGTH];
 	uint32_t conversion_flags;
 	bool was_freq_detected_from_wait_coms;
+	uint8_t current_bank;
 } vgm2mlm_ctx_t;
 
 typedef struct {
@@ -66,6 +68,7 @@ typedef enum {
 	VGM2MLM_STERR_FAILED_TO_WRITE_TO_FILE,
 	VGM2MLM_STERR_BAD_VGM_FILE,
 	VGM2MLM_STERR_UNSUPPORTED_FREQUENCY,
+	VGM2MLM_STERR_FAILED_MEM_ALLOCATION,
 	VGM2MLM_STATUS_COUNT
 } vgm2mlm_status_code_t;
 

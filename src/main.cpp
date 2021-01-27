@@ -20,14 +20,6 @@ extern "C" {
 
 const char* HELP_STRING = "usage: vgm2mlm vgm_file out_directory\n";
 
-void eprintf(const char *fmt, ...) 
-{
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
-}
-
 void fatal_printf(const char *fmt, ...) 
 {
     va_list args;
@@ -35,39 +27,6 @@ void fatal_printf(const char *fmt, ...)
     vfprintf(stderr, fmt, args);
     va_end(args);
     exit(1);
-}
-
-// returns pointer to buffer
-char* file2buffer(const char* filepath, size_t* size)
-{
-	FILE* file = NULL;
-	char* buffer = NULL;
-	int no_size_given = size == NULL;
-
-	if (no_size_given)
-		size = (size_t*)malloc(sizeof(size_t));
-
-	file = fopen(filepath, "rb");
-
-	if (file == NULL)
-	{
-		perror("[file2buffer]");
-		return NULL;
-	}
-
-	fseek(file, 0, SEEK_END);
-	*size = ftell(file);
-	rewind(file);
-	buffer = (char*)malloc(*size);
-	
-	if (fread(buffer, 1, *size, file) != *size)
-		fatal_printf("Failed to read '%s'\n", filepath);
-	fclose(file);
-
-	if (no_size_given)
-		free(size);
-
-	return buffer;
 }
 
 int main(int argc, char* argv[])
