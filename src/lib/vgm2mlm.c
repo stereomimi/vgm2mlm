@@ -210,9 +210,6 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 
 vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* output)
 {
-	const int PROM_TRACK_AUTHOR_OFS = 0x0BB2;
-	const int PROM_TRACK_NAME_OFS   = 0x0BD0;
-
 	output->m1rom_size = (ctx->current_bank+BANK_OFFSET+1)*ZONE3_SIZE;
 	DEBUG_PRINTF("m1rom size\t%d\n", output->m1rom_size);
 	
