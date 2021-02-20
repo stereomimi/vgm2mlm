@@ -27,7 +27,8 @@ const char* VGM2MLM_STATUS_MESSAGES[VGM2MLM_STATUS_COUNT] =
 	"ERROR: Failed to to write buffer to file",
 	"ERROR: The VGM file is corrupted",
 	"ERROR: Unsupported frequency",
-	"ERROR: Failed to allocate memory"
+	"ERROR: Failed to allocate memory",
+	"ERROR: Metadata buffer overlow"
 };
 
 const uint16_t MLM_HEADER[14] = 
@@ -145,6 +146,24 @@ vgm2mlm_status_code_t vgm2mlm_parse_gd3(vgm2mlm_ctx_t* ctx, char* vgm_buffer, si
 	return VGM2MLM_STSUCCESS;
 }
 
+vgm2mlm_status_code_t vgm2mlm_store_metadata_in_prom(const vgm2mlm_ctx_t* ctx, char* unswapped_prom)
+{
+	const char FORMAT[] = "Track: %s\nAuthor:%s\nMade with Delek's Deflemask Tracker";
+	const uint16_t METADATA_OFFSET = 0x0996;
+	const size_t METADATA_CAPACITY = 792;
+
+	const size_t FORMAT_LENGTH = sizeof(FORMAT) - 4;
+	size_t track_length = strlen(ctx->track_name);
+	size_t author_length = strlen(ctx->track_author);
+	size_t metadata_size = FORMAT_LENGTH + track_length + author_length;
+
+	if (metadata_size > METADATA_CAPACITY)
+		return VGM2MLM_STERR_METADATA_OVERFLOW;
+
+	sprintf(unswapped_prom+METADATA_OFFSET, FORMAT, ctx->track_name, ctx->track_author);
+	return VGM2MLM_STSUCCESS;
+}
+
 vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buffer, size_t vgm_size)
 {
 	vgm2mlm_status_code_t status = VGM2MLM_STSUCCESS;
@@ -217,8 +236,11 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 
 	memset(unswapped_prom, 0xFF, PROM_SIZE);
 	memcpy(unswapped_prom, driver_p1, driver_p1_size);
-	memcpy(unswapped_prom+PROM_TRACK_AUTHOR_OFS, ctx->track_author, sizeof(ctx->track_author));
-	memcpy(unswapped_prom+PROM_TRACK_NAME_OFS, ctx->track_name, sizeof(ctx->track_name));
+
+	vgm2mlm_status_code_t status =
+		vgm2mlm_store_metadata_in_prom(ctx, unswapped_prom);
+	if (status != VGM2MLM_STSUCCESS)
+		return status;
 
 	output->prom_buffer =
 		(char*)malloc(PROM_SIZE);
