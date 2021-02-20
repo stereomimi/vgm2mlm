@@ -2,8 +2,8 @@
 #ifndef ___driver_p1_h_included
 #define ___driver_p1_h_included
 
-/* Contents of file driver.p1 */
+/* Contents of file prom.bin */
 extern const long int driver_p1_size;
-extern const unsigned char driver_p1[3320];
+extern const unsigned char driver_p1[3494];
 
-#endif 
+#endif    /* ___driver_p1_h_included */
