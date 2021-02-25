@@ -35,7 +35,7 @@ const uint16_t MLM_HEADER[14] =
 {
 	0x0002, /* Song 0 offset */
 
-	0x001C, /* Song 0, Channel 0  offset */
+	0x001F, /* Song 0, Channel 0  offset */
 	0x0000, /* Song 0, Channel 1  offset */
 	0x0000, /* Song 0, Channel 2  offset */
 	0x0000, /* Song 0, Channel 3  offset */
@@ -50,7 +50,7 @@ const uint16_t MLM_HEADER[14] =
 	0x0000, /* Song 0, Channel 12 offset */
 };
 
-const uint8_t BANK_OFFSET = 2;
+const uint8_t BANK_OFFSET = 1;
 const size_t ZONE3_SIZE = 0x4000;
 const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(16-BANK_OFFSET);
 
@@ -113,11 +113,11 @@ vgm2mlm_status_code_t vgm2mlm_parse_gd3(vgm2mlm_ctx_t* ctx, char* vgm_buffer, si
 	{
 		gd3_offset += 0x14;
 
+		DEBUG_PRINTF("gd3 offset\t0x%08X\n", gd3_offset);
 		if (vgm_size < gd3_offset)
 			return VGM2MLM_STERR_BAD_VGM_FILE;
 
 		char* gd3_data = vgm_buffer+gd3_offset;
-		DEBUG_PRINTF("gd3 offset\t0x%08X\n", gd3_offset);
 		
 		if (strncmp(gd3_data, "Gd3 ", 4) != 0)
 			return VGM2MLM_STERR_INVALID_GD3_TAG;
@@ -282,9 +282,10 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	ctx.vgm_head = vgm_data;
 	ctx.current_bank = 0;
 
-	// Leave some space to add the set 
-	// timer a and set base time command later
-	ctx.mlm_head += 6;
+	// Leave some space to add the 
+	// timer a counter load and
+	// base time values later
+	ctx.mlm_head += 3;
 
 	for (; *ctx.vgm_head != 0x66;)
 	{
@@ -319,15 +320,9 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));
 	DEBUG_PRINTF("tma_load: %d\n", tma_load);
 
-	// Set timer a command
-	mlm_event_list[0] = 0x0F; 
-	mlm_event_list[1] = tma_load >> 2;
-	mlm_event_list[2] = tma_load & 2;   
-
-	// Set base time command
-	mlm_event_list[3] = 0x08;
-	mlm_event_list[4] = ctx.base_time;
-	mlm_event_list[5] = 0; // execute the next event immediately
+	mlm_event_list[0] = tma_load & 0xFF; // Timer A counter load LSB
+	mlm_event_list[1] = tma_load >> 8;   // Timer A counter load MSB
+	mlm_event_list[2] = ctx.base_time;   // Base Time
 
 	status = vgm2mlm_create_rom(&ctx, output);
 	if (status != VGM2MLM_STSUCCESS)
