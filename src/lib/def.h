@@ -22,11 +22,11 @@
 // with programs such as Deflemask.
 #define VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS 1 
 
-//#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
-#define DEBUG_PRINTF(...)
+#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
+//#define DEBUG_PRINTF(...)
 
-#define VGMCOM_PRINTF(...) printf(__VA_ARGS__)
-//#define VGMCOM_PRINTF(...)
+//#define VGMCOM_PRINTF(...) printf(__VA_ARGS__)
+#define VGMCOM_PRINTF(...)
 
 typedef unsigned int uint;
 
