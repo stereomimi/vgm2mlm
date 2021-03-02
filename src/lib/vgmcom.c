@@ -8,32 +8,39 @@
 #include "utils.h"
 
 vgm2mlm_status_code_t VGMCOM_invalid(vgm2mlm_ctx_t* ctx)
-{	
+{
+	VGMCOM_PRINTF("VGMCOM\tinvalid\n");
+
 	return VGM2MLM_STERR_INVALID_VGM_COMMAND;
 }
 
 vgm2mlm_status_code_t VGMCOM_skip_argc0(vgm2mlm_ctx_t* ctx)
 {	
+	VGMCOM_PRINTF("VGMCOM\tskip_argc0\n");
 	(*ctx->vgm_head)++; 
 	return VGM2MLM_STSUCCESS;
 }
 vgm2mlm_status_code_t VGMCOM_skip_argc1(vgm2mlm_ctx_t* ctx)
 {	
+	VGMCOM_PRINTF("VGMCOM\tskip_argc1\n");
 	*ctx->vgm_head += 2; 
 	return VGM2MLM_STSUCCESS;
 }
 vgm2mlm_status_code_t VGMCOM_skip_argc2(vgm2mlm_ctx_t* ctx)
 {	
+	VGMCOM_PRINTF("VGMCOM\tskip_argc2\n");
 	*ctx->vgm_head += 3; 
 	return VGM2MLM_STSUCCESS;
 }
 vgm2mlm_status_code_t VGMCOM_skip_argc3(vgm2mlm_ctx_t* ctx)
 {	
+	VGMCOM_PRINTF("VGMCOM\tskip_argc3\n");
 	*ctx->vgm_head += 4; 
 	return VGM2MLM_STSUCCESS;
 }
 vgm2mlm_status_code_t VGMCOM_skip_argc4(vgm2mlm_ctx_t* ctx)
 {	
+	VGMCOM_PRINTF("VGMCOM\tskip_argc4\n");
 	*ctx->vgm_head += 5; 
 	return VGM2MLM_STSUCCESS;
 }
@@ -42,6 +49,8 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_a(vgm2mlm_ctx_t* ctx)
 {
 	uint8_t address = ctx->vgm_head[1];
 	uint8_t data = ctx->vgm_head[2];
+
+	VGMCOM_PRINTF("VGMCOM\tym2610_write_a (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
 
 	ctx->mlm_head[0] = 0x0D; // YM2610 Port A write command
 	ctx->mlm_head[1] = address;
@@ -57,6 +66,8 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 	uint8_t address = ctx->vgm_head[1];
 	uint8_t data = ctx->vgm_head[2];
 
+	VGMCOM_PRINTF("VGMCOM\tym2610_write_b (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
+
 	ctx->mlm_head[0] = 0x0E; // YM2610 Port B write command
 	ctx->mlm_head[1] = address;
 	ctx->mlm_head[2] = data;
@@ -70,6 +81,8 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 {
 	uint16_t samples = *(uint16_t*)(ctx->vgm_head+1);
+
+	VGMCOM_PRINTF("VGMCOM\twait_nnnn_samples (samples: %d)\n", samples);
 
 	// If the frequency wasn't detected 
 	// from a wait command yet, calculate
@@ -98,6 +111,8 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_wait_735_samples(vgm2mlm_ctx_t* ctx)
 {
+	VGMCOM_PRINTF("VGMCOM\twait_735_samples\n");
+
 	// If the frequency wasn't detected 
 	// from a wait command yet, set 
 	// the frequency to 60Hz
@@ -123,6 +138,8 @@ vgm2mlm_status_code_t VGMCOM_wait_735_samples(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_wait_882_samples(vgm2mlm_ctx_t* ctx)
 {
+	VGMCOM_PRINTF("VGMCOM\twait_882_samples\n");
+
 	// If the frequency wasn't detected 
 	// from a wait command yet, set 
 	// the frequency to 50Hz
@@ -154,6 +171,8 @@ vgm2mlm_status_code_t VGMCOM_data_block(vgm2mlm_ctx_t* ctx)
 	char*    block_data = ctx->vgm_head + 7;
 	//printf("t: 0x%02X, s: %d bytes\n", (uint8_t)block_type, block_size);
 	
+	VGMCOM_PRINTF("VGMCOM\tdata_block (type: 0x%02X; size: %d; data: %p)\n", (uint8_t)block_type, block_size, block_data);
+
 	switch(block_type)
 	{
 		case 0x82: ; // YM2610 ADPCM ROM data 
@@ -186,7 +205,7 @@ vgm2mlm_status_code_t VGMCOM_data_block(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_pcm_ram_write(vgm2mlm_ctx_t* ctx)
 {
-	//fatal_printf("ERROR: pcm_ram_write command isn't supported\n");
+	VGMCOM_PRINTF("VGMCOM\tpcm_ram_write\n");
 	return VGM2MLM_STERR_PCM_WRITE;
 }
 
@@ -196,6 +215,8 @@ vgm2mlm_status_code_t VGMCOM_wait_n_samples(vgm2mlm_ctx_t* ctx)
 	uint ticks = (uint)roundf(
 		samples * ctx->frequency / 44100);
 
+	VGMCOM_PRINTF("VGMCOM\twait_n_samples (samples: %d)\n", samples);
+
 	ctx->mlm_head[0] = 0x10 | ticks;
 	ctx->vgm_head += 1;
 	ctx->mlm_head += 1;
@@ -204,7 +225,7 @@ vgm2mlm_status_code_t VGMCOM_wait_n_samples(vgm2mlm_ctx_t* ctx)
 
 vgm2mlm_status_code_t VGMCOM_dacstrm_cnt_write(vgm2mlm_ctx_t* ctx)
 {
-	//fatal_printf("ERROR: dacstrm_cnt_write command isn't supported\n");
+	VGMCOM_PRINTF("VGMCOM\tdatstrm_cnt_write\n");
 	return VGM2MLM_STERR_DACSTRM_WRITE;
 }
 
