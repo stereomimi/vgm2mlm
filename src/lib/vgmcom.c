@@ -82,8 +82,6 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 {
 	uint16_t samples = *(uint16_t*)(ctx->vgm_head+1);
 
-	VGMCOM_PRINTF("VGMCOM\twait_nnnn_samples (samples: %d)\n", samples);
-
 	// If the frequency wasn't detected 
 	// from a wait command yet, calculate
 	// the frequency (assuming it waited
@@ -99,6 +97,8 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 		if (status != VGM2MLM_STSUCCESS)
 			return status;
 	}
+
+	VGMCOM_PRINTF("VGMCOM\twait_nnnn_samples (samples: %d; ticks: %f)\n", samples, samples * ctx->frequency / 44100.0);
 
 	uint ticks = (uint)roundf(
 		samples * ctx->frequency / 44100);
@@ -171,11 +171,12 @@ vgm2mlm_status_code_t VGMCOM_data_block(vgm2mlm_ctx_t* ctx)
 	char*    block_data = ctx->vgm_head + 7;
 	//printf("t: 0x%02X, s: %d bytes\n", (uint8_t)block_type, block_size);
 	
-	VGMCOM_PRINTF("VGMCOM\tdata_block (type: 0x%02X; size: %d; data: %p)\n", (uint8_t)block_type, block_size, block_data);
+	VGMCOM_PRINTF("VGMCOM\tdata_block (type: 0x%02X; size: 0x%06X; data: %p)\n", (uint8_t)block_type, block_size, block_data);
 
 	switch(block_type)
 	{
-		case 0x82: ; // YM2610 ADPCM ROM data 
+		case 0x82:   // YM2610 ADPCM ROM data
+		case 0x83: ; // YM2610 DELTA-T ROM data
 			{
 				uint32_t rom_size = vmg2mlm_le_32bit_read(block_data);
 				uint32_t start_addr_offset = vmg2mlm_le_32bit_read(block_data+4);
