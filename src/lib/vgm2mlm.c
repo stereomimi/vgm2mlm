@@ -287,6 +287,8 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	// base time values later
 	ctx.mlm_head += 3;
 
+	VGMCOM_PRINTF("========================\n");
+
 	for (; *ctx.vgm_head != 0x66;)
 	{
 		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE)
@@ -314,6 +316,9 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		}
 	}
 
+	if (status != VGM2MLM_STSUCCESS)
+		return status;
+	
 	*ctx.mlm_head = 0x00; // end of event list command
 
 	uint16_t tma_load = (uint16_t)roundf(
@@ -408,7 +413,7 @@ vgm2mlm_status_code_t vgm2mlm_df_intf(char* vgm_path, char* output_path)
 
 	vgm2mlm_output_t output;
 	vgm2mlm_status_code_t status =
-		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS);
+		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, 0); // no flags
 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
