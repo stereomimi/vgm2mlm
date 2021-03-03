@@ -16,17 +16,13 @@
 #define TMA_MIN_FREQ 55
 #define VGM_RATE 44100
 
-// Detects the frequency from the first wait 
-// command of the vgm event list. It's suggested
-// to use this only with VGM files outputted
-// with programs such as Deflemask.
-#define VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS 1 
-
 #define DEBUG_PRINTF(...) printf(__VA_ARGS__)
 //#define DEBUG_PRINTF(...)
 
 //#define VGMCOM_PRINTF(...) printf(__VA_ARGS__)
 #define VGMCOM_PRINTF(...)
+
+#define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
 
 typedef unsigned int uint;
 
@@ -46,7 +42,6 @@ typedef struct {
 	char track_name[TRACK_INFO_LINE_LENGTH];
 	char track_author[TRACK_INFO_LINE_LENGTH];
 	uint32_t conversion_flags;
-	bool was_freq_detected_from_wait_coms;
 	uint8_t current_bank;
 } vgm2mlm_ctx_t;
 
@@ -75,7 +70,14 @@ typedef enum {
 	VGM2MLM_STERR_UNSUPPORTED_FREQUENCY,
 	VGM2MLM_STERR_FAILED_MEM_ALLOCATION,
 	VGM2MLM_STERR_METADATA_OVERFLOW,
+	VGM2MLM_STERR_CORRUPTED_LOOP_OFS,
 	VGM2MLM_STATUS_COUNT
 } vgm2mlm_status_code_t;
+
+typedef enum
+{
+	VGM2MLM_FLAG_NONE = 0x00,
+	VGM2MLM_FLAG_AUTO_TMA_FREQ = 0x01,
+} vgm2mlm_flags_t;
 
 #endif
