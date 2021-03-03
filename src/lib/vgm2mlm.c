@@ -184,6 +184,8 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	if (ctx->vgm_loop_offset != 0)
 		ctx->vgm_loop_offset += 0x1C;
 
+	DEBUG_PRINTF("vgm loop ofs\t0x%08X\n",ctx->vgm_loop_offset);
+
 	ctx->vgm_data_offset =
 		vmg2mlm_le_32bit_read(vgm_buffer+0x34);
 	ctx->vgm_data_offset += 0x34;
@@ -291,7 +293,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 
 	for (; *ctx.vgm_head != 0x66;)
 	{
-		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE)
+		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE-4)
 		{
 			status = 
 				VGM2MLM_STERR_MLM_BUFFER_OVERFLOW;
@@ -300,6 +302,14 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		
 		char* precedent_vgm_head = ctx.vgm_head;
 		char* precedent_mlm_head = ctx.mlm_head;
+
+		if (ctx.vgm_loop_offset != 0 && ctx.vgm_loop_offset == (ctx.vgm_head - vgm_data))
+		{
+			ctx.mlm_loop_offset = ctx.mlm_head - ctx.mlm_buffer;
+			ctx.mlm_loop_bank = ctx.current_bank+BANK_OFFSET;
+			DEBUG_PRINTF("loop start reached (vgm_loop_offset: 0x%04X; mlm_loop_offset: 0x%04X; mlm_loop_bank: 0x%02X)\n",
+				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_bank);
+		}
 
 		status =
 			VGM_COMMANDS[*ctx.vgm_head](&ctx);
@@ -318,8 +328,11 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
-	
-	*ctx.mlm_head = 0x00; // end of event list command
+
+	ctx.mlm_head[0] = 0x21;
+	ctx.mlm_head[1] = ctx.mlm_loop_bank;
+	ctx.mlm_head[2] = ctx.mlm_loop_offset & 0xFF;
+	ctx.mlm_head[3] = (ctx.mlm_loop_offset >> 8) & 0x3F;
 
 	uint16_t tma_load = (uint16_t)roundf(
 		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));
