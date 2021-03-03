@@ -41,6 +41,8 @@ typedef struct {
 	int base_time;
 	uint32_t vgm_data_offset;
 	uint32_t vgm_loop_offset;
+	uint16_t mlm_loop_offset;
+	uint8_t mlm_loop_bank;
 	char track_name[TRACK_INFO_LINE_LENGTH];
 	char track_author[TRACK_INFO_LINE_LENGTH];
 	uint32_t conversion_flags;
