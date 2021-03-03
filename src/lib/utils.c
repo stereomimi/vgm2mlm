@@ -1,6 +1,3 @@
-#ifndef UTILS_H
-#define UTILS_H
-
 #include <stdint.h>
 #include "def.h"
 
@@ -66,4 +63,23 @@ void vgm2mlm_append_mlm_wait_com(vgm2mlm_ctx_t* ctx, uint ticks)
 	}
 }
 
-#endif
+int vgm2mlm_gcd16(uint16_t a, uint16_t b)
+{
+	if (a == 0)
+		return b;
+	return vgm2mlm_gcd16(b % a, a);
+}
+
+int vgm2mlm_gcd16_arr(uint16_t *array, size_t n)
+{
+	int result = array[0];
+
+	for (int i = 1; i < n; i++) 
+    { 
+        result = vgm2mlm_gcd16(array[i], result); 
+  
+        if(result == 1) return 1; 
+    } 
+
+    return result; 
+}

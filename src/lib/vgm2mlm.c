@@ -28,7 +28,8 @@ const char* VGM2MLM_STATUS_MESSAGES[VGM2MLM_STATUS_COUNT] =
 	"ERROR: The VGM file is corrupted",
 	"ERROR: Unsupported frequency",
 	"ERROR: Failed to allocate memory",
-	"ERROR: Metadata buffer overlow"
+	"ERROR: Metadata buffer overlow",
+	"ERROR: Corrupted loop offset"
 };
 
 const uint16_t MLM_HEADER[14] = 
@@ -195,7 +196,7 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	// If the frequency is 0 (thus treated as not specified) and if the automatic
 	// detection of the frequency from the first wait command is off, then get the
 	// frequency from the VGM header.
-	if (ctx->frequency == 0 && !(ctx->conversion_flags & VGM2MLM_FLAGS_FREQ_FROM_WAIT_COMS))
+	if (ctx->frequency == 0)
 	{
 		uint32_t vgm_frequency = 
 			vmg2mlm_le_32bit_read(vgm_buffer+0x24);
@@ -278,6 +279,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	memcpy(ctx.mlm_buffer, MLM_HEADER, sizeof(MLM_HEADER));
 	char* mlm_event_list = ctx.mlm_buffer + sizeof(MLM_HEADER);
 
+	bool was_loop_point_reached = false;
 	ctx.mlm_head = mlm_event_list;
 	ctx.mlm_loop_start = NULL;
 	ctx.vrom_buffer = NULL;
@@ -289,14 +291,77 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	// base time values later
 	ctx.mlm_head += 3;
 
-	VGMCOM_PRINTF("========================\n");
+	if (ctx.conversion_flags & VGM2MLM_FLAG_AUTO_TMA_FREQ)
+	{
+		// very large buffer, but it's 100% safe.
+		uint16_t *wait_times = (uint16_t*)malloc(vgm_size);
+		int wait_times_idx = 0;
 
+		for (; *ctx.vgm_head != 0x66;)
+		{
+			switch(*ctx.vgm_head) 
+			{
+			case 0x58: // YM2610 write port a
+			case 0x59: // YM2610 write port b
+				ctx.vgm_head += 3;
+				break;
+
+			case 0x61: // wait nnnn samples
+				wait_times[wait_times_idx] =
+					ctx.vgm_head[1] | (ctx.vgm_head[2]<<8);
+				ctx.vgm_head += 3;
+				wait_times_idx++;
+				break;
+
+			case 0x62: // wait 735 samples
+				wait_times[wait_times_idx] = 735;
+				ctx.vgm_head++;
+				wait_times_idx++;
+				break;
+
+			case 0x63: // wait 882 samples
+				wait_times[wait_times_idx] = 882;
+				ctx.vgm_head++;
+				wait_times_idx++;
+				break;
+
+			case 0x67: ; // data block
+				uint32_t block_size = vmg2mlm_le_32bit_read(ctx.vgm_head+3);
+				ctx.vgm_head += 7 + block_size;
+				break;
+
+			// wait n samples
+			case 0x70: case 0x71: case 0x72: case 0x73:
+			case 0x74: case 0x75: case 0x76: case 0x77:
+			case 0x78: case 0x79: case 0x7A: case 0x7B:
+			case 0x7C: case 0x7D: case 0x7E: case 0x7F:
+				wait_times[wait_times_idx] = *ctx.vgm_head & 0x0F;
+				ctx.vgm_head++;
+				wait_times_idx++;
+				break;
+
+			default:
+				status = VGM_COMMANDS[*ctx.vgm_head](&ctx);
+				break;
+			}
+		}
+
+		size_t wait_times_size = wait_times_idx * sizeof(uint16_t);
+		wait_times = (uint16_t*)realloc(wait_times, wait_times_size);
+		DEBUG_PRINTF("vgm wait commands count: %d\n", wait_times_idx);
+
+		int wait_times_gcd = vgm2mlm_gcd16_arr(wait_times, wait_times_size/2);
+		DEBUG_PRINTF("vgm wait gcd: %d\n", wait_times_gcd);
+
+		free(wait_times);
+	}
+	
+	VGMCOM_PRINTF("========================\n");
 	for (; *ctx.vgm_head != 0x66;)
 	{
 		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE-4)
 		{
-			status = 
-				VGM2MLM_STERR_MLM_BUFFER_OVERFLOW;
+			status = VGM2MLM_STERR_MLM_BUFFER_OVERFLOW;
 			break;
 		}
 		
@@ -307,10 +372,15 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		{
 			ctx.mlm_loop_offset = ctx.mlm_head - ctx.mlm_buffer;
 			ctx.mlm_loop_bank = ctx.current_bank+BANK_OFFSET;
+			was_loop_point_reached = true;
 			DEBUG_PRINTF("loop start reached (vgm_loop_offset: 0x%04X; mlm_loop_offset: 0x%04X; mlm_loop_bank: 0x%02X)\n",
 				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_bank);
 		}
-
+		else if (ctx.vgm_loop_offset != 0 && (ctx.vgm_head - vgm_data) > ctx.vgm_loop_offset && !was_loop_point_reached)
+		{
+			status = VGM2MLM_STERR_CORRUPTED_LOOP_OFS;
+			break;
+		}
 		status =
 			VGM_COMMANDS[*ctx.vgm_head](&ctx);
 		if (status != VGM2MLM_STSUCCESS)
@@ -426,7 +496,7 @@ vgm2mlm_status_code_t vgm2mlm_df_intf(char* vgm_path, char* output_path)
 
 	vgm2mlm_output_t output;
 	vgm2mlm_status_code_t status =
-		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, 0); // no flags
+		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, VGM2MLM_FLAG_NONE); 
 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
