@@ -6,7 +6,6 @@
 
 #define YM2610B_CLOCK_BITMASK 0x80000000
 #define VROM_BUFFER_SIZE 16777216
-#define M1_BUFFER_SIZE 262144
 #define UINT4_MAX 16
 #define TRACK_INFO_LINE_LENGTH 30 // 29 characters + 1 NULL character
 #define TRACK_NOTES_LINES 10
@@ -16,8 +15,8 @@
 #define TMA_MIN_FREQ 55
 #define VGM_RATE 44100
 
-//#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
-#define DEBUG_PRINTF(...)
+#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
+//#define DEBUG_PRINTF(...)
 
 //#define VGMCOM_PRINTF(...) printf(__VA_ARGS__)
 #define VGMCOM_PRINTF(...)
