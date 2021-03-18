@@ -53,7 +53,8 @@ const uint16_t MLM_HEADER[14] =
 
 const uint8_t BANK_OFFSET = 1;
 const size_t ZONE3_SIZE = 0x4000;
-const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(16-BANK_OFFSET);
+const size_t WRAM_SIZE = 0x0200;
+const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(32-BANK_OFFSET) - WRAM_SIZE;
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -175,23 +176,31 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 	if (strncmp(vgm_buffer, "Vgm ", 4) != 0)
 		return VGM2MLM_STERR_INVALID_VGM_FILE;
 
-	uint32_t ym2610_clock =
-		vmg2mlm_le_32bit_read(vgm_buffer+0x4C);
+	uint32_t ym2610_clock = vmg2mlm_le_32bit_read(vgm_buffer+0x4C);
 	if (!ym2610_clock)
 		return VGM2MLM_STERR_NO_YM2610;
 
-	ctx->vgm_loop_offset =
-		vmg2mlm_le_32bit_read(vgm_buffer+0x1C);
-	if (ctx->vgm_loop_offset != 0)
-		ctx->vgm_loop_offset += 0x1C;
+	uint32_t loop_samples = vmg2mlm_le_32bit_read(vgm_buffer+0x20);
+	//if (loop_samples == 0)
+	if (true)
+	{
+		ctx->vgm_loop_offset = 0;
+	}
+	else
+	{
+		ctx->vgm_loop_offset = vmg2mlm_le_32bit_read(vgm_buffer+0x1C);
+		if (ctx->vgm_loop_offset != 0)
+			ctx->vgm_loop_offset += 0x1C;
+	}
 
-	DEBUG_PRINTF("vgm loop ofs\t0x%08X\n",ctx->vgm_loop_offset);
+	DEBUG_PRINTF("loop samples\t0x%08X\n", loop_samples);
+	DEBUG_PRINTF("vgm loop ofs\t0x%08X\n", ctx->vgm_loop_offset);
 
 	ctx->vgm_data_offset =
 		vmg2mlm_le_32bit_read(vgm_buffer+0x34);
 	ctx->vgm_data_offset += 0x34;
 
-	DEBUG_PRINTF("vgm data ofs\t0x%08X\n",ctx->vgm_data_offset);
+	DEBUG_PRINTF("vgm data ofs\t0x%08X\n", ctx->vgm_data_offset);
 
 	// If the frequency is 0 (thus treated as not specified) and if the automatic
 	// detection of the frequency from the first wait command is off, then get the
@@ -378,11 +387,13 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		}
 		else if (ctx.vgm_loop_offset != 0 && (ctx.vgm_head - vgm_data) > ctx.vgm_loop_offset && !was_loop_point_reached)
 		{
+			DEBUG_PRINTF("WARNING! loop start passed (vgm_loop_offset: 0x%04X; current vgm offset: 0x%04X)\n",
+				ctx.vgm_loop_offset, (uint16_t)(ctx.vgm_head - vgm_buffer));
 			status = VGM2MLM_STERR_CORRUPTED_LOOP_OFS;
 			break;
 		}
-		status =
-			VGM_COMMANDS[*ctx.vgm_head](&ctx);
+
+		status = VGM_COMMANDS[*ctx.vgm_head](&ctx);
 		if (status != VGM2MLM_STSUCCESS)
 			break;
 
@@ -399,10 +410,17 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
 
-	ctx.mlm_head[0] = 0x21;
-	ctx.mlm_head[1] = ctx.mlm_loop_bank;
-	ctx.mlm_head[2] = ctx.mlm_loop_offset & 0xFF;
-	ctx.mlm_head[3] = (ctx.mlm_loop_offset >> 8) & 0x3F;
+	if (ctx.vgm_loop_offset == 0) // if the song doesn't loop...
+	{
+		ctx.mlm_head[0] = 0x00; // End of event list
+	}
+	else
+	{
+		ctx.mlm_head[0] = 0x21; // Switch bank and jump to zone 3 offset
+		ctx.mlm_head[1] = ctx.mlm_loop_bank;
+		ctx.mlm_head[2] = ctx.mlm_loop_offset & 0xFF;
+		ctx.mlm_head[3] = (ctx.mlm_loop_offset >> 8) & 0x3F;
+	}
 
 	uint16_t tma_load = (uint16_t)roundf(
 		1024.0 - (1.0 / ctx.frequency / 72.0 * 4000000.0));

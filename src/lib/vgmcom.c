@@ -50,13 +50,13 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_a(vgm2mlm_ctx_t* ctx)
 	uint8_t address = ctx->vgm_head[1];
 	uint8_t data = ctx->vgm_head[2];
 
-	VGMCOM_PRINTF("VGMCOM\tym2610_write_a (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
+	ctx->vgm_head += 3;
 
+	//VGMCOM_PRINTF("VGMCOM\tym2610_write_a (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
 	ctx->mlm_head[0] = 0x0D; // YM2610 Port A write command
 	ctx->mlm_head[1] = address;
 	ctx->mlm_head[2] = data;
 	ctx->mlm_head += 3;
-	ctx->vgm_head += 3;
 
 	return VGM2MLM_STSUCCESS;
 }
@@ -66,15 +66,14 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 	uint8_t address = ctx->vgm_head[1];
 	uint8_t data = ctx->vgm_head[2];
 
-	VGMCOM_PRINTF("VGMCOM\tym2610_write_b (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
-
+	if (address < 0x30) VGMCOM_PRINTF("VGMCOM\tym2610_write_b (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
 	ctx->mlm_head[0] = 0x0E; // YM2610 Port B write command
 	ctx->mlm_head[1] = address;
 	ctx->mlm_head[2] = data;
-	
-	ctx->vgm_head += 3;
 	ctx->mlm_head += 3;
 
+	ctx->vgm_head += 3;
+	
 	return VGM2MLM_STSUCCESS;
 }
 
@@ -145,7 +144,7 @@ vgm2mlm_status_code_t VGMCOM_data_block(vgm2mlm_ctx_t* ctx)
 
 				memcpy(ctx->vrom_buffer+start_addr_offset, adpcma_rom, adpcma_rom_size);
 				ctx->vrom_buffer_size = rom_size;
-				//printf("rs: %d bytes, sao: 0x%08X\n", rom_size, start_addr_offset);
+				DEBUG_PRINTF("data_block\trom size: %d bytes, start addr ofs: 0x%08X\n", rom_size, start_addr_offset);
 			}
 			break;
 
