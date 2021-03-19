@@ -54,7 +54,7 @@ const uint16_t MLM_HEADER[14] =
 const uint8_t BANK_OFFSET = 1;
 const size_t ZONE3_SIZE = 0x4000;
 const size_t WRAM_SIZE = 0x0200;
-const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(32-BANK_OFFSET) - WRAM_SIZE;
+const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(8-BANK_OFFSET) - WRAM_SIZE;
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -151,7 +151,7 @@ vgm2mlm_status_code_t vgm2mlm_parse_gd3(vgm2mlm_ctx_t* ctx, char* vgm_buffer, si
 vgm2mlm_status_code_t vgm2mlm_store_metadata_in_prom(const vgm2mlm_ctx_t* ctx, char* unswapped_prom)
 {
 	const char FORMAT[] = "Track: %s\nAuthor:%s\nMade with Delek's Deflemask Tracker";
-	const uint16_t METADATA_OFFSET = 0x0996;
+	const uint16_t METADATA_OFFSET = 0x0A76;
 	const size_t METADATA_CAPACITY = 792;
 
 	const size_t FORMAT_LENGTH = sizeof(FORMAT) - 4;
