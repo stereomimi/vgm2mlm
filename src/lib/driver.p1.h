@@ -4,6 +4,6 @@
 
 /* Contents of file prom.bin */
 extern const long int driver_p1_size;
-extern const unsigned char driver_p1[3494];
+extern const unsigned char driver_p1[4096];
 
 #endif    /* ___driver_p1_h_included */
