@@ -54,7 +54,7 @@ const uint16_t MLM_HEADER[14] =
 const uint8_t BANK_OFFSET = 1;
 const size_t ZONE3_SIZE = 0x4000;
 const size_t WRAM_SIZE = 0x0200;
-const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(8-BANK_OFFSET) - WRAM_SIZE;
+const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(32-BANK_OFFSET) - WRAM_SIZE;
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -96,7 +96,7 @@ size_t vgm2mlm_char16_strlen(const char16_t* str)
 	return len+1;
 }
 
-// the size should be dividible by two.
+// the size should be dividible by two. probably doesn't work if src and dest are the same array.
 void vgm2mlm_swap_bytes(const char* src, char* dest, size_t size)
 {
 	for (int i = 0; i < size; i += 2)
@@ -181,8 +181,8 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 		return VGM2MLM_STERR_NO_YM2610;
 
 	uint32_t loop_samples = vmg2mlm_le_32bit_read(vgm_buffer+0x20);
-	//if (loop_samples == 0)
-	if (true)
+	
+	if (loop_samples == 0)
 	{
 		ctx->vgm_loop_offset = 0;
 	}
