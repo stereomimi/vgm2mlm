@@ -14,6 +14,7 @@
 #define TMA_MAX_FREQ 55560
 #define TMA_MIN_FREQ 55
 #define VGM_RATE 44100
+#define REG_WRITES_BUFFER_LEN 18
 
 //#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
 #define DEBUG_PRINTF(...)
@@ -42,6 +43,12 @@ typedef struct {
 	char track_author[TRACK_INFO_LINE_LENGTH];
 	uint32_t conversion_flags;
 	uint8_t current_bank;
+	uint16_t porta_reg_writes_buffer[REG_WRITES_BUFFER_LEN]; // $AADD (Address; Data)
+	size_t porta_reg_writes_idx;
+	bool is_porta_reg_writes_buffer_empty;
+	uint16_t portb_reg_writes_buffer[REG_WRITES_BUFFER_LEN]; // $AADD (Address; Data)
+	size_t portb_reg_writes_idx;
+	bool is_portb_reg_writes_buffer_empty;
 } vgm2mlm_ctx_t;
 
 typedef struct {
