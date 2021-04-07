@@ -182,7 +182,8 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 
 	uint32_t loop_samples = vmg2mlm_le_32bit_read(vgm_buffer+0x20);
 	
-	if (loop_samples == 0)
+	//if (loop_samples == 0)
+	if (true)
 	{
 		ctx->vgm_loop_offset = 0;
 	}
@@ -271,6 +272,10 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	ctx.frequency = frequency;
 	ctx.base_time = 1;
 	ctx.conversion_flags = flags;
+	ctx.porta_reg_writes_idx = 0;
+	ctx.portb_reg_writes_idx = 0;
+	ctx.is_porta_reg_writes_buffer_empty = true;
+	ctx.is_portb_reg_writes_buffer_empty = true;
 
 	vgm2mlm_status_code_t status =
 		vgm2mlm_parse_vgm_header(&ctx, vgm_buffer, vgm_size);
@@ -391,6 +396,96 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 				ctx.vgm_loop_offset, (uint16_t)(ctx.vgm_head - vgm_buffer));
 			status = VGM2MLM_STERR_CORRUPTED_LOOP_OFS;
 			break;
+		}
+
+		if ((*ctx.vgm_head != 0x58 || ctx.porta_reg_writes_idx >= REG_WRITES_BUFFER_LEN-1) && !ctx.is_porta_reg_writes_buffer_empty)
+		{
+			int write_count = ctx.porta_reg_writes_idx;
+
+			size_t current_mlm_size = ctx.mlm_head - ctx.mlm_buffer;
+			if (current_mlm_size + write_count*2 + 1 >= ZONE3_SIZE * (ctx.current_bank+1) - 2)
+			{
+				ctx.current_bank++;
+				ctx.mlm_head[0] = 0x20;
+				ctx.mlm_head[1] = ctx.current_bank+BANK_OFFSET;
+				ctx.mlm_head = ctx.mlm_buffer + ZONE3_SIZE*ctx.current_bank;
+			}
+
+			VGMCOM_PRINTF("\n--------[PORT A MLM WRITE]--------\n");
+
+			if (write_count == 1)
+			{
+				ctx.mlm_head[0] = 0x0D; // YM2610 Port A write command
+				ctx.mlm_head[1] = ctx.porta_reg_writes_buffer[0] >> 8;   // address
+				ctx.mlm_head[2] = ctx.porta_reg_writes_buffer[0] & 0xFF; // data
+
+				VGMCOM_PRINTF("\t0\t0x%02X; 0x%02X\t0x%04X\n", (uint8_t)ctx.mlm_head[1], (uint8_t)ctx.mlm_head[2], ctx.porta_reg_writes_buffer[0]);
+				ctx.mlm_head += 3;
+			}
+			else
+			{
+				*ctx.mlm_head = 0x30 | (write_count - 2);
+				ctx.mlm_head++;
+
+				for (int i = 0; i < write_count; i++)
+				{
+					ctx.mlm_head[0] = ctx.porta_reg_writes_buffer[i] >> 8;  // address
+					ctx.mlm_head[1] = ctx.porta_reg_writes_buffer[i] & 0xFF;
+
+					VGMCOM_PRINTF("\t%d\t0x%02X; 0x%02X\t0x%04X\n", i, (uint8_t)ctx.mlm_head[0], (uint8_t)ctx.mlm_head[1], ctx.porta_reg_writes_buffer[i]);
+					ctx.mlm_head += 2;
+				}
+			}
+
+			VGMCOM_PRINTF("----------------------------------\n\n");
+
+			ctx.porta_reg_writes_idx = 0;
+			ctx.is_porta_reg_writes_buffer_empty = true;
+		}
+
+		if ((*ctx.vgm_head != 0x59 || ctx.portb_reg_writes_idx >= REG_WRITES_BUFFER_LEN-1) && !ctx.is_portb_reg_writes_buffer_empty)
+		{
+			int write_count = ctx.portb_reg_writes_idx;
+
+			size_t current_mlm_size = ctx.mlm_head - ctx.mlm_buffer;
+			if (current_mlm_size + write_count*2 + 1 >= ZONE3_SIZE * (ctx.current_bank+1) - 2)
+			{
+				ctx.current_bank++;
+				ctx.mlm_head[0] = 0x20;
+				ctx.mlm_head[1] = ctx.current_bank+BANK_OFFSET;
+				ctx.mlm_head = ctx.mlm_buffer + ZONE3_SIZE*ctx.current_bank;
+			}
+
+			VGMCOM_PRINTF("\n--------[PORT B MLM WRITE]--------\n");
+
+			if (write_count == 1)
+			{
+				ctx.mlm_head[0] = 0x0E; // YM2610 Port B write command
+				ctx.mlm_head[1] = ctx.portb_reg_writes_buffer[0] >> 8;   // address
+				ctx.mlm_head[2] = ctx.portb_reg_writes_buffer[0] & 0xFF; // data
+
+				VGMCOM_PRINTF("\t0\t0x%02X; 0x%02X\t0x%04X\n", (uint8_t)ctx.mlm_head[1], (uint8_t)ctx.mlm_head[2], ctx.portb_reg_writes_buffer[0]);
+				ctx.mlm_head += 3;
+			}
+			else
+			{
+				*ctx.mlm_head = 0x40 | (write_count - 2);
+				ctx.mlm_head++;
+
+				for (int i = 0; i < write_count; i++)
+				{
+					ctx.mlm_head[0] = ctx.portb_reg_writes_buffer[i] >> 8;  // address
+					ctx.mlm_head[1] = ctx.portb_reg_writes_buffer[i] & 0xFF;
+
+					VGMCOM_PRINTF("\t%d\t0x%02X; 0x%02X\t0x%04X\n", i, (uint8_t)ctx.mlm_head[0], (uint8_t)ctx.mlm_head[1], ctx.portb_reg_writes_buffer[i]);
+					ctx.mlm_head += 2;
+				}
+			}
+
+			VGMCOM_PRINTF("----------------------------------\n\n");
+
+			ctx.portb_reg_writes_idx = 0;
+			ctx.is_portb_reg_writes_buffer_empty = true;
 		}
 
 		status = VGM_COMMANDS[*ctx.vgm_head](&ctx);
