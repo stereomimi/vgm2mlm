@@ -51,10 +51,11 @@ const uint16_t MLM_HEADER[14] =
 	0x0000, /* Song 0, Channel 12 offset */
 };
 
-const uint8_t BANK_OFFSET = 1;
-const size_t ZONE3_SIZE = 0x4000;
+const uint8_t BLOCK_OFFSET = 1;
+const size_t BLOCK_SIZE = 0x2000;
 const size_t WRAM_SIZE = 0x0200;
-const size_t MLM_BUFFER_SIZE = ZONE3_SIZE*(32-BANK_OFFSET) - WRAM_SIZE;
+const size_t MLM_BUFFER_SIZE = BLOCK_SIZE*(64-BLOCK_OFFSET) - WRAM_SIZE;
+const size_t FINAL_BLOCK_COM_SIZE = 4; // Size of the command at the end of each block
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -223,7 +224,7 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 
 vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* output)
 {
-	output->m1rom_size = (ctx->current_bank+BANK_OFFSET+1)*ZONE3_SIZE;
+	output->m1rom_size = (ctx->current_block+BLOCK_OFFSET+1)*BLOCK_SIZE;
 	DEBUG_PRINTF("m1rom size\t%d\n", output->m1rom_size);
 	
 	output->m1rom_buffer = 
@@ -232,9 +233,9 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 		return VGM2MLM_STERR_FAILED_MEM_ALLOCATION;
 
 	memcpy(output->m1rom_buffer, driver_m1, driver_m1_size);
-	memcpy(output->m1rom_buffer+(ZONE3_SIZE*BANK_OFFSET), ctx->mlm_buffer, (ctx->current_bank+1)*ZONE3_SIZE);
-	DEBUG_PRINTF("m1rom mlm ofs\t0x%05X\n", ZONE3_SIZE*BANK_OFFSET);
-	DEBUG_PRINTF("m1rom mlm size\t0x%05X\n", (ctx->current_bank+1)*ZONE3_SIZE);
+	memcpy(output->m1rom_buffer+(BLOCK_SIZE*BLOCK_OFFSET), ctx->mlm_buffer, (ctx->current_block+1)*BLOCK_SIZE);
+	DEBUG_PRINTF("m1rom mlm ofs\t0x%05X\n", BLOCK_SIZE*BLOCK_OFFSET);
+	DEBUG_PRINTF("m1rom mlm size\t0x%05X\n", (ctx->current_block+1)*BLOCK_SIZE);
 
 	output->vrom_buffer = ctx->vrom_buffer;
 	output->vrom_size = ctx->vrom_buffer_size;
@@ -264,6 +265,11 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 	
 	free(unswapped_prom);
 	return VGM2MLM_STSUCCESS;
+}
+
+bool vgm2mlm_is_block_full(vgm2mlm_ctx_t* ctx)
+{
+	return ctx->mlm_head - ctx->mlm_buffer >= BLOCK_SIZE * (ctx->current_block+1) - FINAL_BLOCK_COM_SIZE;
 }
 
 vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
@@ -298,77 +304,12 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	ctx.mlm_loop_start = NULL;
 	ctx.vrom_buffer = NULL;
 	ctx.vgm_head = vgm_data;
-	ctx.current_bank = 0;
+	ctx.current_block = 0;
 
 	// Leave some space to add the 
 	// timer a counter load and
 	// base time values later
 	ctx.mlm_head += 3;
-
-	if (ctx.conversion_flags & VGM2MLM_FLAG_AUTO_TMA_FREQ)
-	{
-		// very large buffer, but it's 100% safe.
-		uint16_t *wait_times = (uint16_t*)malloc(vgm_size);
-		int wait_times_idx = 0;
-
-		for (; *ctx.vgm_head != 0x66;)
-		{
-			switch(*ctx.vgm_head) 
-			{
-			case 0x58: // YM2610 write port a
-			case 0x59: // YM2610 write port b
-				ctx.vgm_head += 3;
-				break;
-
-			case 0x61: // wait nnnn samples
-				wait_times[wait_times_idx] =
-					ctx.vgm_head[1] | (ctx.vgm_head[2]<<8);
-				ctx.vgm_head += 3;
-				wait_times_idx++;
-				break;
-
-			case 0x62: // wait 735 samples
-				wait_times[wait_times_idx] = 735;
-				ctx.vgm_head++;
-				wait_times_idx++;
-				break;
-
-			case 0x63: // wait 882 samples
-				wait_times[wait_times_idx] = 882;
-				ctx.vgm_head++;
-				wait_times_idx++;
-				break;
-
-			case 0x67: ; // data block
-				uint32_t block_size = vmg2mlm_le_32bit_read(ctx.vgm_head+3);
-				ctx.vgm_head += 7 + block_size;
-				break;
-
-			// wait n samples
-			case 0x70: case 0x71: case 0x72: case 0x73:
-			case 0x74: case 0x75: case 0x76: case 0x77:
-			case 0x78: case 0x79: case 0x7A: case 0x7B:
-			case 0x7C: case 0x7D: case 0x7E: case 0x7F:
-				wait_times[wait_times_idx] = *ctx.vgm_head & 0x0F;
-				ctx.vgm_head++;
-				wait_times_idx++;
-				break;
-
-			default:
-				status = VGM_COMMANDS[*ctx.vgm_head](&ctx);
-				break;
-			}
-		}
-
-		size_t wait_times_size = wait_times_idx * sizeof(uint16_t);
-		wait_times = (uint16_t*)realloc(wait_times, wait_times_size);
-		DEBUG_PRINTF("vgm wait commands count: %d\n", wait_times_idx);
-
-		int wait_times_gcd = vgm2mlm_gcd16_arr(wait_times, wait_times_size/2);
-		DEBUG_PRINTF("vgm wait gcd: %d\n", wait_times_gcd);
-
-		free(wait_times);
-	}
 	
 	VGMCOM_PRINTF("========================\n");
 	for (; *ctx.vgm_head != 0x66;)
@@ -382,15 +323,15 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		char* precedent_vgm_head = ctx.vgm_head;
 		char* precedent_mlm_head = ctx.mlm_head;
 
-		if (ctx.vgm_loop_offset != 0 && ctx.vgm_loop_offset == (ctx.vgm_head - vgm_data))
+		if (ctx.vgm_loop_offset != 0 && ctx.vgm_loop_offset == (ctx.vgm_head - vgm_data))                                // if loop point was reached...
 		{
 			ctx.mlm_loop_offset = ctx.mlm_head - ctx.mlm_buffer;
-			ctx.mlm_loop_bank = ctx.current_bank+BANK_OFFSET;
+			ctx.mlm_loop_bank = ctx.current_block+BLOCK_OFFSET;
 			was_loop_point_reached = true;
 			DEBUG_PRINTF("loop start reached (vgm_loop_offset: 0x%04X; mlm_loop_offset: 0x%04X; mlm_loop_bank: 0x%02X)\n",
 				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_bank);
 		}
-		else if (ctx.vgm_loop_offset != 0 && (ctx.vgm_head - vgm_data) > ctx.vgm_loop_offset && !was_loop_point_reached)
+		else if (ctx.vgm_loop_offset != 0 && (ctx.vgm_head - vgm_data) > ctx.vgm_loop_offset && !was_loop_point_reached) // if loop point was reached but is now behind the head...
 		{
 			DEBUG_PRINTF("WARNING! loop start passed (vgm_loop_offset: 0x%04X; current vgm offset: 0x%04X)\n",
 				ctx.vgm_loop_offset, (uint16_t)(ctx.vgm_head - vgm_buffer));
@@ -398,17 +339,19 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 			break;
 		}
 
+		// if the Port A write buffer isn't empty AND if a command that 
+		// isn't a YM2610 Port A register write/the buffer is full then...
 		if ((*ctx.vgm_head != 0x58 || ctx.porta_reg_writes_idx >= REG_WRITES_BUFFER_LEN-1) && !ctx.is_porta_reg_writes_buffer_empty)
 		{
 			int write_count = ctx.porta_reg_writes_idx;
 
 			size_t current_mlm_size = ctx.mlm_head - ctx.mlm_buffer;
-			if (current_mlm_size + write_count*2 + 1 >= ZONE3_SIZE * (ctx.current_bank+1) - 2)
+			if (vgm2mlm_is_block_full(&ctx))
 			{
-				ctx.current_bank++;
+				ctx.current_block++;
 				ctx.mlm_head[0] = 0x20;
-				ctx.mlm_head[1] = ctx.current_bank+BANK_OFFSET;
-				ctx.mlm_head = ctx.mlm_buffer + ZONE3_SIZE*ctx.current_bank;
+				ctx.mlm_head[1] = ctx.current_block+BLOCK_OFFSET;
+				ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
 			}
 
 			VGMCOM_PRINTF("\n--------[PORT A MLM WRITE]--------\n");
@@ -443,17 +386,19 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 			ctx.is_porta_reg_writes_buffer_empty = true;
 		}
 
+		// if the Port B write buffer isn't empty AND if a command that 
+		// isn't a YM2610 Port B register write/the buffer is full then...
 		if ((*ctx.vgm_head != 0x59 || ctx.portb_reg_writes_idx >= REG_WRITES_BUFFER_LEN-1) && !ctx.is_portb_reg_writes_buffer_empty)
 		{
 			int write_count = ctx.portb_reg_writes_idx;
 
 			size_t current_mlm_size = ctx.mlm_head - ctx.mlm_buffer;
-			if (current_mlm_size + write_count*2 + 1 >= ZONE3_SIZE * (ctx.current_bank+1) - 2)
+			if (vgm2mlm_is_block_full(&ctx))
 			{
-				ctx.current_bank++;
+				ctx.current_block++;
 				ctx.mlm_head[0] = 0x20;
-				ctx.mlm_head[1] = ctx.current_bank+BANK_OFFSET;
-				ctx.mlm_head = ctx.mlm_buffer + ZONE3_SIZE*ctx.current_bank;
+				ctx.mlm_head[1] = ctx.current_block+BLOCK_OFFSET;
+				ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
 			}
 
 			VGMCOM_PRINTF("\n--------[PORT B MLM WRITE]--------\n");
@@ -492,12 +437,12 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		if (status != VGM2MLM_STSUCCESS)
 			break;
 
-		if (ctx.mlm_head - ctx.mlm_buffer >= ZONE3_SIZE * (ctx.current_bank+1) - 2)
+		if (vgm2mlm_is_block_full(&ctx))
 		{
-			ctx.current_bank++;
-			ctx.mlm_head = ctx.mlm_buffer + ZONE3_SIZE*ctx.current_bank;
+			ctx.current_block++;
+			ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
 			precedent_mlm_head[0] = 0x20;
-			precedent_mlm_head[1] = ctx.current_bank+BANK_OFFSET;
+			precedent_mlm_head[1] = ctx.current_block+BLOCK_OFFSET;
 			ctx.vgm_head = precedent_vgm_head;
 		}
 	}

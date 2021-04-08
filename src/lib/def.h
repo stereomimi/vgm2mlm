@@ -42,7 +42,7 @@ typedef struct {
 	char track_name[TRACK_INFO_LINE_LENGTH];
 	char track_author[TRACK_INFO_LINE_LENGTH];
 	uint32_t conversion_flags;
-	uint8_t current_bank;
+	uint8_t current_block;
 	uint16_t porta_reg_writes_buffer[REG_WRITES_BUFFER_LEN]; // $AADD (Address; Data)
 	size_t porta_reg_writes_idx;
 	bool is_porta_reg_writes_buffer_empty;
