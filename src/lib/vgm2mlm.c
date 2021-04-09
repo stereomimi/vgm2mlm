@@ -52,10 +52,11 @@ const uint16_t MLM_HEADER[14] =
 };
 
 const uint8_t BLOCK_OFFSET = 1;
+const uint8_t BLOCK_COUNT = (64-BLOCK_OFFSET);
 const size_t BLOCK_SIZE = 0x2000;
 const size_t WRAM_SIZE = 0x0200;
-const size_t MLM_BUFFER_SIZE = BLOCK_SIZE*(64-BLOCK_OFFSET) - WRAM_SIZE;
-const size_t FINAL_BLOCK_COM_SIZE = 4; // Size of the command at the end of each block
+const size_t MLM_BUFFER_SIZE = BLOCK_SIZE * BLOCK_COUNT - WRAM_SIZE;
+const size_t BIGGEST_COM_SIZE = 35; // Biggest possible size for a command (YM2610 Port A/B write x17)
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -152,7 +153,7 @@ vgm2mlm_status_code_t vgm2mlm_parse_gd3(vgm2mlm_ctx_t* ctx, char* vgm_buffer, si
 vgm2mlm_status_code_t vgm2mlm_store_metadata_in_prom(const vgm2mlm_ctx_t* ctx, char* unswapped_prom)
 {
 	const char FORMAT[] = "Track: %s\nAuthor:%s\nMade with Delek's Deflemask Tracker";
-	const uint16_t METADATA_OFFSET = 0x0A76;
+	const uint16_t METADATA_OFFSET = 0x0A3E;
 	const size_t METADATA_CAPACITY = 792;
 
 	const size_t FORMAT_LENGTH = sizeof(FORMAT) - 4;
@@ -269,12 +270,16 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 
 bool vgm2mlm_is_block_full(vgm2mlm_ctx_t* ctx)
 {
-	return ctx->mlm_head - ctx->mlm_buffer >= BLOCK_SIZE * (ctx->current_block+1) - FINAL_BLOCK_COM_SIZE;
+	return ctx->mlm_head - ctx->mlm_buffer >= BLOCK_SIZE * (ctx->current_block+1) - BIGGEST_COM_SIZE;
 }
 
 vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
 {
+	char* final_block_coms[BLOCK_COUNT];
 	vgm2mlm_ctx_t ctx;
+	
+	MEMCLEAR(final_block_coms, sizeof(final_block_coms)); // clear final_block_coms
+
 	ctx.frequency = frequency;
 	ctx.base_time = 1;
 	ctx.conversion_flags = flags;
@@ -314,22 +319,19 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	VGMCOM_PRINTF("========================\n");
 	for (; *ctx.vgm_head != 0x66;)
 	{
-		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE-4)
+		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE - BIGGEST_COM_SIZE)
 		{
 			status = VGM2MLM_STERR_MLM_BUFFER_OVERFLOW;
 			break;
 		}
-		
-		char* precedent_vgm_head = ctx.vgm_head;
-		char* precedent_mlm_head = ctx.mlm_head;
 
 		if (ctx.vgm_loop_offset != 0 && ctx.vgm_loop_offset == (ctx.vgm_head - vgm_data))                                // if loop point was reached...
 		{
 			ctx.mlm_loop_offset = ctx.mlm_head - ctx.mlm_buffer;
-			ctx.mlm_loop_bank = ctx.current_block+BLOCK_OFFSET;
+			ctx.mlm_loop_block = ctx.current_block+BLOCK_OFFSET;
 			was_loop_point_reached = true;
-			DEBUG_PRINTF("loop start reached (vgm_loop_offset: 0x%04X; mlm_loop_offset: 0x%04X; mlm_loop_bank: 0x%02X)\n",
-				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_bank);
+			DEBUG_PRINTF("loop start reached (vgm_loop_offset: 0x%04X; mlm_loop_offset: 0x%04X; mlm_loop_block: 0x%02X)\n",
+				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_block);
 		}
 		else if (ctx.vgm_loop_offset != 0 && (ctx.vgm_head - vgm_data) > ctx.vgm_loop_offset && !was_loop_point_reached) // if loop point was reached but is now behind the head...
 		{
@@ -339,20 +341,24 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 			break;
 		}
 
+		if (vgm2mlm_is_block_full(&ctx))
+		{
+			final_block_coms[ctx.current_block] = ctx.mlm_head;
+
+			ctx.mlm_head[0] = 0x22;                                 // Command 34
+			ctx.mlm_head[1] = 0x00;                                 // Address LSB
+			ctx.mlm_head[2] = 0x00;                                 // Address MSB
+			ctx.mlm_head[3] = ctx.current_block + 2 + BLOCK_OFFSET; // Block
+
+			ctx.current_block++;
+			ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
+		}
+
 		// if the Port A write buffer isn't empty AND if a command that 
 		// isn't a YM2610 Port A register write/the buffer is full then...
 		if ((*ctx.vgm_head != 0x58 || ctx.porta_reg_writes_idx >= REG_WRITES_BUFFER_LEN-1) && !ctx.is_porta_reg_writes_buffer_empty)
 		{
 			int write_count = ctx.porta_reg_writes_idx;
-
-			size_t current_mlm_size = ctx.mlm_head - ctx.mlm_buffer;
-			if (vgm2mlm_is_block_full(&ctx))
-			{
-				ctx.current_block++;
-				ctx.mlm_head[0] = 0x20;
-				ctx.mlm_head[1] = ctx.current_block+BLOCK_OFFSET;
-				ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
-			}
 
 			VGMCOM_PRINTF("\n--------[PORT A MLM WRITE]--------\n");
 
@@ -392,15 +398,6 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		{
 			int write_count = ctx.portb_reg_writes_idx;
 
-			size_t current_mlm_size = ctx.mlm_head - ctx.mlm_buffer;
-			if (vgm2mlm_is_block_full(&ctx))
-			{
-				ctx.current_block++;
-				ctx.mlm_head[0] = 0x20;
-				ctx.mlm_head[1] = ctx.current_block+BLOCK_OFFSET;
-				ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
-			}
-
 			VGMCOM_PRINTF("\n--------[PORT B MLM WRITE]--------\n");
 
 			if (write_count == 1)
@@ -436,30 +433,32 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		status = VGM_COMMANDS[*ctx.vgm_head](&ctx);
 		if (status != VGM2MLM_STSUCCESS)
 			break;
-
-		if (vgm2mlm_is_block_full(&ctx))
-		{
-			ctx.current_block++;
-			ctx.mlm_head = ctx.mlm_buffer + BLOCK_SIZE*ctx.current_block;
-			precedent_mlm_head[0] = 0x20;
-			precedent_mlm_head[1] = ctx.current_block+BLOCK_OFFSET;
-			ctx.vgm_head = precedent_vgm_head;
-		}
 	}
 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
 
-	if (ctx.vgm_loop_offset == 0) // if the song doesn't loop...
+	if (ctx.vgm_loop_offset == 0)                     // if the song doesn't loop...
 	{
 		ctx.mlm_head[0] = 0x00; // End of event list
 	}
-	else
+	else if (ctx.current_block == ctx.mlm_loop_block) // if the song loops in a single block...
 	{
-		ctx.mlm_head[0] = 0x21; // Switch bank and jump to zone 3 offset
-		ctx.mlm_head[1] = ctx.mlm_loop_bank;
-		ctx.mlm_head[2] = ctx.mlm_loop_offset & 0xFF;
-		ctx.mlm_head[3] = (ctx.mlm_loop_offset >> 8) & 0x3F;
+		
+	}
+	else                                              // if the song loops in more than one block...
+	{
+		uint16_t block_ofs = ctx.mlm_loop_offset - (ctx.mlm_loop_block * BLOCK_SIZE);
+		char* precedent_com34 = final_block_coms[ctx.current_block-1];
+
+		precedent_com34[1] = block_ofs & 0xFF;                   // Address LSB
+		precedent_com34[2] = block_ofs >> 8;                     // Address MSB
+		precedent_com34[3] = ctx.mlm_loop_block + BLOCK_OFFSET;  // Block
+
+		ctx.mlm_head[0] = 0x22;                                  // Command 34
+		ctx.mlm_head[1] = 0x00;                                  // Address LSB
+		ctx.mlm_head[2] = 0x00;                                  // Address MSB
+		ctx.mlm_head[3] = ctx.mlm_loop_block + 1 + BLOCK_OFFSET; // Block
 	}
 
 	uint16_t tma_load = (uint16_t)roundf(
