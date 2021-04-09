@@ -23,6 +23,7 @@
 #define VGMCOM_PRINTF(...)
 
 #define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
+#define MEMCLEAR(str, n) (memset(str, 0, n))
 
 typedef unsigned int uint;
 
@@ -38,7 +39,7 @@ typedef struct {
 	uint32_t vgm_data_offset;
 	uint32_t vgm_loop_offset;
 	uint16_t mlm_loop_offset;
-	uint8_t mlm_loop_bank;
+	uint8_t mlm_loop_block;
 	char track_name[TRACK_INFO_LINE_LENGTH];
 	char track_author[TRACK_INFO_LINE_LENGTH];
 	uint32_t conversion_flags;
