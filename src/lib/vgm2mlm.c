@@ -184,8 +184,7 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 
 	uint32_t loop_samples = vmg2mlm_le_32bit_read(vgm_buffer+0x20);
 	
-	//if (loop_samples == 0)
-	if (true)
+	if (loop_samples == 0)
 	{
 		ctx->vgm_loop_offset = 0;
 	}
@@ -270,7 +269,7 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 
 bool vgm2mlm_is_block_full(vgm2mlm_ctx_t* ctx)
 {
-	return ctx->mlm_head - ctx->mlm_buffer >= BLOCK_SIZE * (ctx->current_block+1) - BIGGEST_COM_SIZE;
+	return (ctx->mlm_head - ctx->mlm_buffer) >= BLOCK_SIZE * (ctx->current_block+1) - BIGGEST_COM_SIZE - 1;
 }
 
 vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
@@ -344,6 +343,8 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		if (vgm2mlm_is_block_full(&ctx))
 		{
 			final_block_coms[ctx.current_block] = ctx.mlm_head;
+
+			DEBUG_PRINTF("MLMCOM 34 (purpose: continue; address: 0x0000; block: 0x%02X)\n", ctx.current_block + 2 + BLOCK_OFFSET);
 
 			ctx.mlm_head[0] = 0x22;                                 // Command 34
 			ctx.mlm_head[1] = 0x00;                                 // Address LSB
@@ -440,20 +441,29 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 
 	if (ctx.vgm_loop_offset == 0)                     // if the song doesn't loop...
 	{
+		DEBUG_PRINTF("Loop: None\n");
 		ctx.mlm_head[0] = 0x00; // End of event list
 	}
 	else if (ctx.current_block == ctx.mlm_loop_block) // if the song loops in a single block...
 	{
-		
+		DEBUG_PRINTF("Loop: InZone\n");
+		uint16_t block_ofs = ctx.mlm_loop_offset - (ctx.mlm_loop_block * BLOCK_SIZE);
+
+		ctx.mlm_head[0] = 0x21; // Command 33
+		ctx.mlm_head[1] = block_ofs & 0xFF;
+		ctx.mlm_head[2] = block_ofs >> 8;
 	}
 	else                                              // if the song loops in more than one block...
 	{
+		DEBUG_PRINTF("Loop: Banked\n");
 		uint16_t block_ofs = ctx.mlm_loop_offset - (ctx.mlm_loop_block * BLOCK_SIZE);
 		char* precedent_com34 = final_block_coms[ctx.current_block-1];
 
 		precedent_com34[1] = block_ofs & 0xFF;                   // Address LSB
 		precedent_com34[2] = block_ofs >> 8;                     // Address MSB
 		precedent_com34[3] = ctx.mlm_loop_block + BLOCK_OFFSET;  // Block
+
+		DEBUG_PRINTF("MLMCOM 34 (purpose: loop; address: 0x0000; block: 0x%02X)\n", ctx.mlm_loop_block + 1 + BLOCK_OFFSET);
 
 		ctx.mlm_head[0] = 0x22;                                  // Command 34
 		ctx.mlm_head[1] = 0x00;                                  // Address LSB
