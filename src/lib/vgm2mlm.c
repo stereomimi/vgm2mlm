@@ -56,7 +56,8 @@ const uint8_t BLOCK_COUNT = (64-BLOCK_OFFSET);
 const size_t BLOCK_SIZE = 0x2000;
 const size_t WRAM_SIZE = 0x0200;
 const size_t MLM_BUFFER_SIZE = BLOCK_SIZE * BLOCK_COUNT - WRAM_SIZE;
-const size_t BIGGEST_COM_SIZE = 35; // Biggest possible size for a command (YM2610 Port A/B write x17)
+const size_t BIGGEST_MLMCOM_SIZE = 35; // Biggest possible size for a command (YM2610 Port A/B write x17)
+const size_t MLMCOM_34_SIZE   = 4;
 
 // returns the number of characters in
 // the source string, which is equal to
@@ -212,6 +213,8 @@ vgm2mlm_status_code_t vgm2mlm_parse_vgm_header(vgm2mlm_ctx_t* ctx, char* vgm_buf
 		uint32_t vgm_frequency = 
 			vmg2mlm_le_32bit_read(vgm_buffer+0x24);
 		
+		DEBUG_PRINTF("vgm data freq\t%d Hz\n", vgm_frequency);
+
 		status = vgm2mlm_set_timing(ctx, vgm_frequency);
 
 		if (status != VGM2MLM_STSUCCESS)
@@ -269,7 +272,7 @@ vgm2mlm_status_code_t vgm2mlm_create_rom(vgm2mlm_ctx_t* ctx, vgm2mlm_output_t* o
 
 bool vgm2mlm_is_block_full(vgm2mlm_ctx_t* ctx)
 {
-	return (ctx->mlm_head - ctx->mlm_buffer) >= BLOCK_SIZE * (ctx->current_block+1) - BIGGEST_COM_SIZE - 1;
+	return (ctx->mlm_head - ctx->mlm_buffer) >= BLOCK_SIZE * (ctx->current_block+1) - BIGGEST_MLMCOM_SIZE - MLMCOM_34_SIZE - 1;
 }
 
 vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, vgm2mlm_output_t* output, uint32_t flags)
@@ -318,19 +321,19 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 	VGMCOM_PRINTF("========================\n");
 	for (; *ctx.vgm_head != 0x66;)
 	{
-		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE - BIGGEST_COM_SIZE)
+		if (ctx.mlm_head - ctx.mlm_buffer >= MLM_BUFFER_SIZE - BIGGEST_MLMCOM_SIZE - MLMCOM_34_SIZE - 1)
 		{
 			status = VGM2MLM_STERR_MLM_BUFFER_OVERFLOW;
 			break;
 		}
 
-		if (ctx.vgm_loop_offset != 0 && ctx.vgm_loop_offset == (ctx.vgm_head - vgm_data))                                // if loop point was reached...
+		if (ctx.vgm_loop_offset != 0 && ctx.vgm_loop_offset == (ctx.vgm_head - vgm_buffer))                                // if loop point was reached...
 		{
 			ctx.mlm_loop_offset = ctx.mlm_head - ctx.mlm_buffer;
-			ctx.mlm_loop_block = ctx.current_block+BLOCK_OFFSET;
+			ctx.mlm_loop_block = ctx.current_block;
 			was_loop_point_reached = true;
 			DEBUG_PRINTF("loop start reached (vgm_loop_offset: 0x%04X; mlm_loop_offset: 0x%04X; mlm_loop_block: 0x%02X)\n",
-				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_block);
+				ctx.vgm_loop_offset, (uint16_t)ctx.mlm_loop_offset, (uint8_t)ctx.mlm_loop_block+BLOCK_OFFSET);
 		}
 		else if (ctx.vgm_loop_offset != 0 && (ctx.vgm_head - vgm_data) > ctx.vgm_loop_offset && !was_loop_point_reached) // if loop point was reached but is now behind the head...
 		{
@@ -361,7 +364,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		{
 			int write_count = ctx.porta_reg_writes_idx;
 
-			VGMCOM_PRINTF("\n--------[PORT A MLM WRITE]--------\n");
+			//VGMCOM_PRINTF("\n--------[PORT A MLM WRITE]--------\n");
 
 			if (write_count == 1)
 			{
@@ -369,7 +372,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 				ctx.mlm_head[1] = ctx.porta_reg_writes_buffer[0] >> 8;   // address
 				ctx.mlm_head[2] = ctx.porta_reg_writes_buffer[0] & 0xFF; // data
 
-				VGMCOM_PRINTF("\t0\t0x%02X; 0x%02X\t0x%04X\n", (uint8_t)ctx.mlm_head[1], (uint8_t)ctx.mlm_head[2], ctx.porta_reg_writes_buffer[0]);
+				//VGMCOM_PRINTF("\t0\t0x%02X; 0x%02X\t0x%04X\n", (uint8_t)ctx.mlm_head[1], (uint8_t)ctx.mlm_head[2], ctx.porta_reg_writes_buffer[0]);
 				ctx.mlm_head += 3;
 			}
 			else
@@ -382,12 +385,12 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 					ctx.mlm_head[0] = ctx.porta_reg_writes_buffer[i] >> 8;  // address
 					ctx.mlm_head[1] = ctx.porta_reg_writes_buffer[i] & 0xFF;
 
-					VGMCOM_PRINTF("\t%d\t0x%02X; 0x%02X\t0x%04X\n", i, (uint8_t)ctx.mlm_head[0], (uint8_t)ctx.mlm_head[1], ctx.porta_reg_writes_buffer[i]);
+					//VGMCOM_PRINTF("\t%d\t0x%02X; 0x%02X\t0x%04X\n", i, (uint8_t)ctx.mlm_head[0], (uint8_t)ctx.mlm_head[1], ctx.porta_reg_writes_buffer[i]);
 					ctx.mlm_head += 2;
 				}
 			}
 
-			VGMCOM_PRINTF("----------------------------------\n\n");
+			//VGMCOM_PRINTF("----------------------------------\n\n");
 
 			ctx.porta_reg_writes_idx = 0;
 			ctx.is_porta_reg_writes_buffer_empty = true;
@@ -399,7 +402,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		{
 			int write_count = ctx.portb_reg_writes_idx;
 
-			VGMCOM_PRINTF("\n--------[PORT B MLM WRITE]--------\n");
+			//VGMCOM_PRINTF("\n--------[PORT B MLM WRITE]--------\n");
 
 			if (write_count == 1)
 			{
@@ -407,7 +410,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 				ctx.mlm_head[1] = ctx.portb_reg_writes_buffer[0] >> 8;   // address
 				ctx.mlm_head[2] = ctx.portb_reg_writes_buffer[0] & 0xFF; // data
 
-				VGMCOM_PRINTF("\t0\t0x%02X; 0x%02X\t0x%04X\n", (uint8_t)ctx.mlm_head[1], (uint8_t)ctx.mlm_head[2], ctx.portb_reg_writes_buffer[0]);
+				//VGMCOM_PRINTF("\t0\t0x%02X; 0x%02X\t0x%04X\n", (uint8_t)ctx.mlm_head[1], (uint8_t)ctx.mlm_head[2], ctx.portb_reg_writes_buffer[0]);
 				ctx.mlm_head += 3;
 			}
 			else
@@ -420,12 +423,12 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 					ctx.mlm_head[0] = ctx.portb_reg_writes_buffer[i] >> 8;  // address
 					ctx.mlm_head[1] = ctx.portb_reg_writes_buffer[i] & 0xFF;
 
-					VGMCOM_PRINTF("\t%d\t0x%02X; 0x%02X\t0x%04X\n", i, (uint8_t)ctx.mlm_head[0], (uint8_t)ctx.mlm_head[1], ctx.portb_reg_writes_buffer[i]);
+					//VGMCOM_PRINTF("\t%d\t0x%02X; 0x%02X\t0x%04X\n", i, (uint8_t)ctx.mlm_head[0], (uint8_t)ctx.mlm_head[1], ctx.portb_reg_writes_buffer[i]);
 					ctx.mlm_head += 2;
 				}
 			}
 
-			VGMCOM_PRINTF("----------------------------------\n\n");
+			//VGMCOM_PRINTF("----------------------------------\n\n");
 
 			ctx.portb_reg_writes_idx = 0;
 			ctx.is_portb_reg_writes_buffer_empty = true;
@@ -459,16 +462,14 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		uint16_t block_ofs = ctx.mlm_loop_offset - (ctx.mlm_loop_block * BLOCK_SIZE);
 		char* precedent_com34 = final_block_coms[ctx.current_block-1];
 
-		precedent_com34[1] = block_ofs & 0xFF;                   // Address LSB
-		precedent_com34[2] = block_ofs >> 8;                     // Address MSB
 		precedent_com34[3] = ctx.mlm_loop_block + BLOCK_OFFSET;  // Block
 
-		DEBUG_PRINTF("MLMCOM 34 (purpose: loop; address: 0x0000; block: 0x%02X)\n", ctx.mlm_loop_block + 1 + BLOCK_OFFSET);
+		DEBUG_PRINTF("MLMCOM 34 (purpose: loop; address: 0x%04X; block: 0x%02X)\n", block_ofs, ctx.mlm_loop_block + BLOCK_OFFSET);
 
 		ctx.mlm_head[0] = 0x22;                                  // Command 34
-		ctx.mlm_head[1] = 0x00;                                  // Address LSB
-		ctx.mlm_head[2] = 0x00;                                  // Address MSB
-		ctx.mlm_head[3] = ctx.mlm_loop_block + 1 + BLOCK_OFFSET; // Block
+		ctx.mlm_head[1] = block_ofs & 0xFF;                      // Address LSB
+		ctx.mlm_head[2] = block_ofs >> 8;                        // Address MSB
+		ctx.mlm_head[3] = ctx.mlm_loop_block + BLOCK_OFFSET + 1; // Block
 	}
 
 	uint16_t tma_load = (uint16_t)roundf(
@@ -563,7 +564,7 @@ vgm2mlm_status_code_t vgm2mlm_df_intf(char* vgm_path, char* output_path)
 
 	vgm2mlm_output_t output;
 	vgm2mlm_status_code_t status =
-		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, VGM2MLM_FLAG_NONE); 
+		vgm2mlm(vgm_buffer, vgm_buffer_size, 0, &output, VGM2MLM_FLAG_AUTO_TMA_FREQ); 
 
 	if (status != VGM2MLM_STSUCCESS)
 		return status;
