@@ -434,7 +434,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 			ctx.is_portb_reg_writes_buffer_empty = true;
 		}
 
-		status = VGM_COMMANDS[*ctx.vgm_head](&ctx);
+		status = VGM_COMMANDS[(uchar)(*ctx.vgm_head)](&ctx);
 		if (status != VGM2MLM_STSUCCESS)
 			break;
 	}

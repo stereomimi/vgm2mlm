@@ -26,6 +26,7 @@
 #define MEMCLEAR(str, n) (memset(str, 0, n))
 
 typedef unsigned int uint;
+typedef unsigned char uchar;
 
 typedef struct {
 	char* vgm_head;
