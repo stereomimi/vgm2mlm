@@ -52,8 +52,6 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_a(vgm2mlm_ctx_t* ctx)
 
 	ctx->vgm_head += 3;
 
-	if (address != 0xFF) return VGM2MLM_STSUCCESS;
-
 	if (ctx->porta_reg_writes_idx < REG_WRITES_BUFFER_LEN-1) // if buffer isn't full...
 	{
 		ctx->porta_reg_writes_buffer[ctx->porta_reg_writes_idx] = (address<<8) | data;
@@ -72,8 +70,6 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 	uint8_t data = ctx->vgm_head[2];
 	
 	ctx->vgm_head += 3;
-
-	if (address >= 0x31) return VGM2MLM_STSUCCESS;
 
 	if (ctx->portb_reg_writes_idx < REG_WRITES_BUFFER_LEN-1) // if buffer isn't full...
 	{
