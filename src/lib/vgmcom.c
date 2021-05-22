@@ -88,7 +88,7 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 	uint16_t samples = *(uint16_t*)(ctx->vgm_head+1);
 
 	int ticks = (uint)roundf(
-		samples * ctx->frequency / 44100.0f);
+		samples * ctx->frequency / ctx->base_time / 44100.0f);
 
 	VGMCOM_PRINTF("VGMCOM\twait_nnnn_samples (samples: %d; ticks: %f (%d))\n", samples, samples * ctx->frequency / 44100.0, ticks);
 
@@ -103,7 +103,7 @@ vgm2mlm_status_code_t VGMCOM_wait_735_samples(vgm2mlm_ctx_t* ctx)
 	VGMCOM_PRINTF("VGMCOM\twait_735_samples\n");
 
 	uint ticks = (uint)roundf(
-		735 * ctx->frequency / 44100);
+		735 * ctx->frequency / ctx->base_time / 44100);
 
 	vgm2mlm_append_mlm_wait_com(ctx, ticks);
 
@@ -116,7 +116,7 @@ vgm2mlm_status_code_t VGMCOM_wait_882_samples(vgm2mlm_ctx_t* ctx)
 	VGMCOM_PRINTF("VGMCOM\twait_882_samples\n");
 
 	uint ticks = (uint)roundf(
-		882 * ctx->frequency / 44100);
+		882 * ctx->frequency / ctx->base_time / 44100);
 
 	vgm2mlm_append_mlm_wait_com(ctx, ticks);
 
@@ -175,7 +175,7 @@ vgm2mlm_status_code_t VGMCOM_wait_n_samples(vgm2mlm_ctx_t* ctx)
 {
 	uint samples = ctx->vgm_head[0];
 	uint ticks = (uint)roundf(
-		samples * ctx->frequency / 44100);
+		samples * ctx->frequency / ctx->base_time / 44100);
 
 	VGMCOM_PRINTF("VGMCOM\twait_n_samples (samples: %d)\n", samples);
 

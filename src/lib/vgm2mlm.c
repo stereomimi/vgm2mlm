@@ -296,6 +296,7 @@ vgm2mlm_status_code_t vgm2mlm(char* vgm_buffer, size_t vgm_size, int frequency, 
 		return status;
 
 	DEBUG_PRINTF("ctx.base_time: %d\n", ctx.base_time);
+	DEBUG_PRINTF("ctx.frequency: %d\n", ctx.frequency);
 
 	char* vgm_data = vgm_buffer + ctx.vgm_data_offset;
 
@@ -549,10 +550,16 @@ vgm2mlm_status_code_t vgm2mlm_write_buffer_to_file(const char* filename, const c
 // the directory itself has to be created before-hand
 vgm2mlm_status_code_t vgm2mlm_df_intf(char* vgm_path, char* output_path)
 {
-	const char* FILENAMES[] = 
+	/*const char* FILENAMES[] = 
 	{
 		"/p1.bin",  "/v1.bin",  "/m1.bin",
 		"/c1.bin", "/c2.bin", "/s1.bin"
+	};*/
+
+	const char* FILENAMES[] = 
+	{
+		"/prom.bin",  "/vrom.bin",  "/m1rom.bin",
+		"/c1rom.bin", "/c2rom.bin", "/srom.bin"
 	};
 
 	const char DUMMY_ROM[1] = { 0x00 };
