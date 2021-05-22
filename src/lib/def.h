@@ -16,8 +16,8 @@
 #define VGM_RATE 44100
 #define REG_WRITES_BUFFER_LEN 18
 
-#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
-//#define DEBUG_PRINTF(...)
+//#define DEBUG_PRINTF(...) printf(__VA_ARGS__)
+#define DEBUG_PRINTF(...)
 
 //#define VGMCOM_PRINTF(...) printf(__VA_ARGS__)
 #define VGMCOM_PRINTF(...)

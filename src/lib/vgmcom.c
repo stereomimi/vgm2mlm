@@ -90,7 +90,7 @@ vgm2mlm_status_code_t VGMCOM_wait_nnnn_samples(vgm2mlm_ctx_t* ctx)
 	int ticks = (uint)roundf(
 		samples * ctx->frequency / ctx->base_time / 44100.0f);
 
-	VGMCOM_PRINTF("VGMCOM\twait_nnnn_samples (samples: %d; ticks: %f (%d))\n", samples, samples * ctx->frequency / 44100.0, ticks);
+	VGMCOM_PRINTF("VGMCOM\twait_nnnn_samples (samples: %d; ticks: %f (%d))\n", samples, samples * ctx->frequency / ctx->base_time / 44100.0, ticks);
 
 	vgm2mlm_append_mlm_wait_com(ctx, ticks);
 
