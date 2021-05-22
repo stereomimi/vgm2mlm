@@ -52,6 +52,8 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_a(vgm2mlm_ctx_t* ctx)
 
 	ctx->vgm_head += 3;
 
+	if (address != 0xFF) return VGM2MLM_STSUCCESS;
+
 	if (ctx->porta_reg_writes_idx < REG_WRITES_BUFFER_LEN-1) // if buffer isn't full...
 	{
 		ctx->porta_reg_writes_buffer[ctx->porta_reg_writes_idx] = (address<<8) | data;
@@ -59,7 +61,7 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_a(vgm2mlm_ctx_t* ctx)
 		ctx->is_porta_reg_writes_buffer_empty = false;
 	}
 
-	//VGMCOM_PRINTF("VGMCOM\tym2610_write_a (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
+	VGMCOM_PRINTF("VGMCOM\tym2610_write_a (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
 
 	return VGM2MLM_STSUCCESS;
 }
@@ -71,6 +73,8 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 	
 	ctx->vgm_head += 3;
 
+	if (address >= 0x31) return VGM2MLM_STSUCCESS;
+
 	if (ctx->portb_reg_writes_idx < REG_WRITES_BUFFER_LEN-1) // if buffer isn't full...
 	{
 		ctx->portb_reg_writes_buffer[ctx->portb_reg_writes_idx] = (address<<8) | data;
@@ -78,12 +82,7 @@ vgm2mlm_status_code_t VGMCOM_ym2610_write_b(vgm2mlm_ctx_t* ctx)
 		ctx->is_portb_reg_writes_buffer_empty = false;
 	}
 
-	//VGMCOM_PRINTF("VGMCOM\tym2610_write_b (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
-
-	/*ctx->mlm_head[0] = 0x0E; // YM2610 Port B write command
-	ctx->mlm_head[1] = address;
-	ctx->mlm_head[2] = data;
-	ctx->mlm_head += 3;*/
+	VGMCOM_PRINTF("VGMCOM\tym2610_write_b (addr: 0x%02X; data: 0x%02X)\n", (uint8_t)address, (uint8_t)data);
 	
 	return VGM2MLM_STSUCCESS;
 }
