@@ -126,8 +126,14 @@ vgm2mlm_status_code_t vgm2mlm_parse_gd3(vgm2mlm_ctx_t* ctx, char* vgm_buffer, si
 		
 		if (strncmp(gd3_data, "Gd3 ", 4) != 0)
 			return VGM2MLM_STERR_INVALID_GD3_TAG;
-		
-		char16_t* gd3_strings = (char16_t*)(gd3_data+12);
+
+		uint32_t gd3_len;
+		memcpy(&gd3_len, gd3_data + 8, 4);  // copy to avoid misaligned read
+
+		char16_t gd3header[1024];
+		memcpy(gd3header, gd3_data + 12, gd3_len);  // copy to avoid misaligned reads
+
+		char16_t* gd3_strings = gd3header;
 		
 		gd3_strings += 
 			vgm2mlm_char16_to_char8_str(gd3_strings, ctx->track_name, TRACK_INFO_LINE_LENGTH);
